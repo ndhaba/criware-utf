@@ -1,0 +1,15 @@
+[package]
+name = "criware-utf-derive"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-2.0-or-later"
+license-file = "LICENSE"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+criware-utf-core = { version = "0.1.0", path = "../criware-utf-core" }
+proc-macro2 = "1.0.96"
+quote = "1.0.40"
+syn = { version = "2.0.104", features = ["extra-traits"] }
