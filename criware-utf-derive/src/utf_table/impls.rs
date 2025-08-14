@@ -104,7 +104,7 @@ pub fn generate_read_fn(struct_info: &StructInfo, columns: &Columns) -> TokenStr
     }
     quote! {
         fn read(reader: &mut impl ::std::io::Read) -> ::std::result::Result<Self, ::criware_utf_core::Error> {
-            let mut reader = ::criware_utf_core::UTFReader::new(reader, #table_name, #field_count)?;
+            let mut reader = ::criware_utf_core::Reader::new(reader, #table_name, #field_count)?;
             #column_decls
             #row_reading_code
             ::std::result::Result::Ok(#table_ident { #(#components),* })
@@ -116,7 +116,7 @@ pub fn generate_table_impl_block(struct_info: &StructInfo, columns: &Columns) ->
     let ident = &struct_info.table_ident;
     let read_fn = generate_read_fn(struct_info, columns);
     quote! {
-        impl ::criware_utf_core::UTFTable for #ident {
+        impl ::criware_utf_core::Table for #ident {
             #read_fn
         }
     }

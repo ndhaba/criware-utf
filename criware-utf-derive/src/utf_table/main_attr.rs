@@ -10,13 +10,13 @@ use crate::{
     utils::{ident_from_expr, string_from_expr},
 };
 
-pub struct UTFTableArgs {
+pub struct TableParams {
     pub constants_ident: Option<Ident>,
     pub rows_ident: Option<Ident>,
     pub table_name: Option<String>,
 }
 
-impl Parse for UTFTableArgs {
+impl Parse for TableParams {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut constants_ident = None;
         let mut rows_ident = None;
@@ -41,7 +41,7 @@ impl Parse for UTFTableArgs {
                 _ => syn_error!(meta.path.span(), "Unknown parameter"),
             }
         }
-        Ok(UTFTableArgs {
+        Ok(TableParams {
             constants_ident,
             rows_ident,
             table_name,
@@ -68,14 +68,14 @@ pub fn parse_struct_info(attr: TokenStream, item: TokenStream) -> Result<StructI
         syn::Data::Enum(e) => syn_error!(e.enum_token.span(), "Enums are not supported"),
         syn::Data::Union(u) => syn_error!(u.union_token.span(), "Unions are not supported"),
     };
-    let args = syn::parse2::<UTFTableArgs>(attr)?;
-    let constants_ident = args
+    let params = syn::parse2::<TableParams>(attr)?;
+    let constants_ident = params
         .constants_ident
         .unwrap_or(format_ident!("{}Constants", derive_input.ident));
-    let row_ident = args
+    let row_ident = params
         .rows_ident
         .unwrap_or(format_ident!("{}Row", derive_input.ident));
-    let table_name = args.table_name.unwrap_or(derive_input.ident.to_string());
+    let table_name = params.table_name.unwrap_or(derive_input.ident.to_string());
     Ok(StructInfo {
         table_ident: derive_input.ident.clone(),
         table_name,

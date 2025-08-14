@@ -4,9 +4,9 @@ pub(crate) mod reader;
 pub(crate) mod table;
 pub(crate) mod value;
 
-pub use crate::reader::UTFReader;
-pub use crate::table::UTFTable;
-pub use crate::value::{UTFPrimitive, UTFValue, utf_size_of};
+pub use crate::reader::Reader;
+pub use crate::table::Table;
+pub use crate::value::{Primitive, Value, utf_size_of};
 
 #[derive(Debug, Error)]
 pub enum Error {

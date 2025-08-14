@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::{
-    Error, Result, UTFValue,
-    value::sealed::{Primitive, UTFValueStorageMethod},
+    Error, Result, Value,
+    value::sealed::{Primitive, StorageMethod},
 };
 
 trait IOErrorHelper<T> {
@@ -26,7 +26,7 @@ impl<T> IOErrorHelper<T> for std::io::Result<T> {
     }
 }
 
-pub struct UTFReader {
+pub struct Reader {
     column_buffer: Cursor<Vec<u8>>,
     column_buffer_size: usize,
     row_buffer: Cursor<Vec<u8>>,
@@ -35,12 +35,12 @@ pub struct UTFReader {
     blobs: Vec<u8>,
 }
 
-impl UTFReader {
+impl Reader {
     pub fn new(
         reader: &mut impl Read,
         table_name: &'static str,
         field_count: u16,
-    ) -> Result<UTFReader> {
+    ) -> Result<Reader> {
         let table_size = {
             let mut header = [0u8; 8];
             reader.read_exact(&mut header).io("@UTF header")?;
@@ -119,7 +119,7 @@ impl UTFReader {
         }
         let mut blobs = vec![0u8; (table_size - blob_offset) as usize];
         reader.read_exact(&mut blobs).io("UTF blob data")?;
-        Ok(UTFReader {
+        Ok(Reader {
             column_buffer,
             column_buffer_size,
             row_buffer,
@@ -134,7 +134,7 @@ impl UTFReader {
     pub fn more_row_data(&self) -> bool {
         (self.row_buffer.position() as usize) < self.row_buffer_size
     }
-    pub fn read_column_constant<T: UTFValue>(&mut self, name: &'static str) -> Result<T> {
+    pub fn read_column_constant<T: Value>(&mut self, name: &'static str) -> Result<T> {
         let flag: u8 = self.read_value(false)?;
         let column_name: String = self.read_value(false)?;
         if column_name != name {
@@ -162,7 +162,7 @@ impl UTFReader {
         }
         Ok(())
     }
-    pub fn read_column_rowed<T: UTFValue>(&mut self, name: &'static str) -> Result<()> {
+    pub fn read_column_rowed<T: Value>(&mut self, name: &'static str) -> Result<()> {
         let flag: u8 = self.read_value(false)?;
         let column_name: String = self.read_value(false)?;
         if column_name != name {
@@ -179,10 +179,10 @@ impl UTFReader {
         }
         Ok(())
     }
-    pub fn read_row_value<T: UTFValue>(&mut self) -> Result<T> {
+    pub fn read_row_value<T: Value>(&mut self) -> Result<T> {
         self.read_value(true)
     }
-    fn read_value<T: UTFValue>(&mut self, rowed: bool) -> Result<T> {
+    fn read_value<T: Value>(&mut self, rowed: bool) -> Result<T> {
         let mut buffer: <T::Primitive as Primitive>::Buffer = Default::default();
         let reader = if rowed {
             &mut self.row_buffer
@@ -202,16 +202,14 @@ impl UTFReader {
             },
         };
         let primitive = match <T::Primitive as Primitive>::STORAGE_TYPE {
-            UTFValueStorageMethod::Number => unsafe {
-                <T::Primitive as Primitive>::parse_number(buffer)
-            },
-            UTFValueStorageMethod::String => {
+            StorageMethod::Number => unsafe { <T::Primitive as Primitive>::parse_number(buffer) },
+            StorageMethod::String => {
                 match unsafe { <T::Primitive as Primitive>::parse_string(buffer, &self.strings) } {
                     Some(string) => string,
                     None => return Err(Error::StringNotFound),
                 }
             }
-            UTFValueStorageMethod::Blob => {
+            StorageMethod::Blob => {
                 match unsafe { <T::Primitive as Primitive>::parse_blob(buffer, &self.blobs) } {
                     Some(blob) => blob,
                     None => return Err(Error::BlobNotFound),

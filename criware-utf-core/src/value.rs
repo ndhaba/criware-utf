@@ -2,7 +2,7 @@ pub(crate) mod sealed {
     use std::collections::HashMap;
 
     #[derive(Clone, Copy, PartialEq, Eq)]
-    pub enum UTFValueStorageMethod {
+    pub enum StorageMethod {
         Number,
         String,
         Blob,
@@ -13,7 +13,7 @@ pub(crate) mod sealed {
         type Buffer: AsMut<[u8]> + Default;
 
         const SIZE_IN_UTF: usize = std::mem::size_of::<Self::Buffer>();
-        const STORAGE_TYPE: UTFValueStorageMethod;
+        const STORAGE_TYPE: StorageMethod;
         const TYPE_FLAG: u8;
 
         unsafe fn parse_number(_data: Self::Buffer) -> Self {
@@ -36,7 +36,7 @@ pub(crate) mod sealed {
                 impl Primitive for $name {
                     type Buffer = [u8; std::mem::size_of::<$name>()];
 
-                    const STORAGE_TYPE: UTFValueStorageMethod = UTFValueStorageMethod::Number;
+                    const STORAGE_TYPE: StorageMethod = StorageMethod::Number;
                     const TYPE_FLAG: u8 = $flag;
 
                     #[inline(always)]
@@ -53,7 +53,7 @@ pub(crate) mod sealed {
     impl Primitive for String {
         type Buffer = [u8; 4];
 
-        const STORAGE_TYPE: UTFValueStorageMethod = UTFValueStorageMethod::String;
+        const STORAGE_TYPE: StorageMethod = StorageMethod::String;
         const TYPE_FLAG: u8 = 0xa;
 
         #[inline(always)]
@@ -65,7 +65,7 @@ pub(crate) mod sealed {
     impl Primitive for Vec<u8> {
         type Buffer = [u8; 8];
 
-        const STORAGE_TYPE: UTFValueStorageMethod = UTFValueStorageMethod::Blob;
+        const STORAGE_TYPE: StorageMethod = StorageMethod::Blob;
         const TYPE_FLAG: u8 = 0xb;
 
         unsafe fn parse_blob(data: Self::Buffer, blob: &Vec<u8>) -> Option<Self> {
@@ -94,18 +94,18 @@ macro_rules! blanket_impl {
     };
 }
 
-pub trait UTFPrimitive: sealed::Primitive {}
+pub trait Primitive: sealed::Primitive {}
 
-blanket_impl!(UTFPrimitive for u8, u16, u32, u64, i8, i16, i32, i64, f32, String, Vec<u8>);
+blanket_impl!(Primitive for u8, u16, u32, u64, i8, i16, i32, i64, f32, String, Vec<u8>);
 
-pub trait UTFValue: Sized {
-    type Primitive: UTFPrimitive;
+pub trait Value: Sized {
+    type Primitive: Primitive;
 
     fn from_utf_value(value: Self::Primitive) -> Result<Self, Box<dyn std::error::Error>>;
     fn to_utf_value(self) -> Self::Primitive;
 }
 
-impl<T: UTFPrimitive> UTFValue for T {
+impl<T: Primitive> Value for T {
     type Primitive = T;
 
     #[inline(always)]
@@ -119,6 +119,6 @@ impl<T: UTFPrimitive> UTFValue for T {
 }
 
 #[inline(always)]
-pub const fn utf_size_of<T: UTFValue>() -> usize {
+pub const fn utf_size_of<T: Value>() -> usize {
     <T::Primitive as sealed::Primitive>::SIZE_IN_UTF
 }
