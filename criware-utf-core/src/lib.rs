@@ -33,8 +33,8 @@ pub enum Error {
     WrongColumnName(String, &'static str),
     #[error("wrong column type flag: 0x{0:02} (expected 0x{1:02})")]
     WrongColumnType(u8, u8),
-    #[error("wrong column storage flag: 0x{0:02} (expected 0x{1:02})")]
-    WrongColumnStorage(u8, u8),
+    #[error("wrong column storage flag: 0x{0:02} (expected {1})")]
+    WrongColumnStorage(u8, &'static str),
     #[error("wrong table schema")]
     WrongTableSchema,
 }

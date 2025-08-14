@@ -30,8 +30,8 @@ pub struct Schema {
 
 impl Reader {
     fn get_column(&mut self) -> Result<Column> {
-        let flag: u8 = self.read_value(false)?;
-        let column_name: String = self.read_value(false)?;
+        let flag: u8 = self.read_raw_value(false)?;
+        let column_name: String = self.read_raw_value(false)?;
         let value_kind = match flag & 0x0f {
             0 => ValueKind::U8,
             1 => ValueKind::S8,
@@ -51,16 +51,16 @@ impl Reader {
             0x30 => {
                 match value_kind {
                     ValueKind::U8 | ValueKind::S8 => {
-                        self.read_value::<u8>(false)?;
+                        self.read_raw_value::<u8>(false)?;
                     }
                     ValueKind::U16 | ValueKind::S16 => {
-                        self.read_value::<u16>(false)?;
+                        self.read_raw_value::<u16>(false)?;
                     }
                     ValueKind::U32 | ValueKind::S32 | ValueKind::F32 | ValueKind::STR => {
-                        self.read_value::<u32>(false)?;
+                        self.read_raw_value::<u32>(false)?;
                     }
                     ValueKind::U64 | ValueKind::S64 | ValueKind::BLOB => {
-                        self.read_value::<u64>(false)?;
+                        self.read_raw_value::<u64>(false)?;
                     }
                 };
                 Ok(Column::Constant(column_name, value_kind))

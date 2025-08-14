@@ -1,36 +1,28 @@
-use proc_macro2::TokenStream;
-use quote::{ToTokens, TokenStreamExt};
+use quote::format_ident;
 use syn::{DataStruct, Field, Ident, Type, Visibility, spanned::Spanned};
 
 use crate::{Result, utils::*};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum ColumnStorageType {
-    Zero,
     Constant,
     Rowed,
-}
-
-impl ToTokens for ColumnStorageType {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self {
-            ColumnStorageType::Zero => tokens.append(proc_macro2::Literal::u8_unsuffixed(0x10)),
-            ColumnStorageType::Constant => tokens.append(proc_macro2::Literal::u8_unsuffixed(0x30)),
-            ColumnStorageType::Rowed => tokens.append(proc_macro2::Literal::u8_unsuffixed(0x50)),
-        }
-    }
 }
 
 pub struct Column {
     pub field_ident: Ident,
     pub column_name: String,
     pub storage_type: ColumnStorageType,
+    pub optional: bool,
     pub ty: Type,
     pub vis: Visibility,
+    pub variable_ident: Ident,
+    pub condition_ident: Ident,
 }
 
-fn parse_column(field: &Field) -> Result<Column> {
+fn parse_column(field: &Field, idx: usize) -> Result<Column> {
     let mut storage_type = None;
+    let mut optional = false;
     let mut column_name = None;
     for attr in &field.attrs {
         let name = get_attribute_name(&attr)?;
@@ -45,9 +37,15 @@ fn parse_column(field: &Field) -> Result<Column> {
             }};
         }
         match name.as_str() {
-            "zero" => set_storage_type!("zero" => Zero),
             "constant" => set_storage_type!("constant" => Constant),
             "rowed" => set_storage_type!("rowed" => Rowed),
+            "optional" => {
+                if optional {
+                    syn_error!(attr.span(), "Duplicate attribute");
+                } else {
+                    optional = true;
+                }
+            }
             "column_name" => {
                 if column_name.is_some() {
                     syn_error!(attr.span(), "Duplicate attribute");
@@ -68,8 +66,11 @@ fn parse_column(field: &Field) -> Result<Column> {
         column_name: column_name
             .unwrap_or(snake_case_to_upper_camel(field_name.to_string().as_str())),
         storage_type: storage_type.unwrap_or(ColumnStorageType::Rowed),
+        optional,
         ty: field.ty.clone(),
         vis: field.vis.clone(),
+        variable_ident: format_ident!("__v{idx}"),
+        condition_ident: format_ident!("__c{idx}"),
     })
 }
 
@@ -83,8 +84,9 @@ pub fn parse_columns(struct_input: &DataStruct) -> Result<Columns> {
     let mut has_constant = false;
     let mut has_row = false;
     let mut columns = Vec::new();
+    let mut idx = 0;
     for field in &struct_input.fields {
-        let column = parse_column(&field)?;
+        let column = parse_column(&field, idx)?;
         match column.storage_type {
             ColumnStorageType::Constant => {
                 has_constant = true;
@@ -92,9 +94,9 @@ pub fn parse_columns(struct_input: &DataStruct) -> Result<Columns> {
             ColumnStorageType::Rowed => {
                 has_row = true;
             }
-            _ => {}
         }
         columns.push(column);
+        idx += 1;
     }
     Ok(Columns {
         has_constant,

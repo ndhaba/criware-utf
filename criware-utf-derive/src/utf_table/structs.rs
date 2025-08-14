@@ -21,8 +21,14 @@ fn generate_value_struct(
         let name = &column.field_ident;
         let ty = &column.ty;
         let vis = &column.vis;
-        fields.push(quote! {
-            #vis #name: #ty
+        fields.push(if column.optional {
+            quote! {
+                #vis #name: ::std::option::Option<#ty>
+            }
+        } else {
+            quote! {
+                #vis #name: #ty
+            }
         });
     }
     quote! {

@@ -1,6 +1,5 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::Ident;
 
 use crate::utf_table::{
     field_attr::{Column, ColumnStorageType, Columns},
@@ -9,44 +8,57 @@ use crate::utf_table::{
 
 fn generate_column_decl(column: &Column) -> TokenStream {
     match column.storage_type {
-        ColumnStorageType::Zero => {
-            let column_name = &column.column_name;
-            quote! {
-                reader.read_column_zero(#column_name)?;
-            }
-        }
         ColumnStorageType::Constant => {
             let column_name = &column.column_name;
-            let field_ident = &column.field_ident;
-            quote! {
-                let #field_ident = reader.read_column_constant(#column_name)?;
+            let var_ident = &column.variable_ident;
+            if column.optional {
+                quote! {
+                    let #var_ident = reader.read_column_constant_opt(#column_name)?;
+                }
+            } else {
+                quote! {
+                    let #var_ident = reader.read_column_constant(#column_name)?;
+                }
             }
         }
         ColumnStorageType::Rowed => {
             let column_name = &column.column_name;
             let ty = &column.ty;
-            quote! {
-                reader.read_column_rowed::<#ty>(#column_name)?;
+            if column.optional {
+                let cond_ident = &column.condition_ident;
+                quote! {
+                    let #cond_ident = reader.read_column_rowed_opt::<#ty>(#column_name)?;
+                }
+            } else {
+                quote! {
+                    reader.read_column_rowed::<#ty>(#column_name)?;
+                }
             }
         }
+    }
+}
+
+fn generate_field_init(column: &Column) -> TokenStream {
+    let field_ident = &column.field_ident;
+    let var_ident = &column.variable_ident;
+    quote! {
+        #field_ident: #var_ident
     }
 }
 
 fn generate_column_decls(struct_info: &StructInfo, columns: &Columns) -> TokenStream {
     let decls: Vec<TokenStream> = columns.columns.iter().map(generate_column_decl).collect();
     if columns.has_constant {
-        let field_idents: Vec<&Ident> = columns
+        let field_inits: Vec<TokenStream> = columns
             .columns
             .iter()
             .filter(|c| c.storage_type == ColumnStorageType::Constant)
-            .map(|c| &c.field_ident)
+            .map(generate_field_init)
             .collect();
         let constants_ident = &struct_info.constants_ident;
         quote! {
-            let constants: #constants_ident = {
-                #(#decls)*
-                #constants_ident { #(#field_idents),* }
-            };
+            #(#decls)*
+            let constants = #constants_ident { #(#field_inits),* };
         }
     } else {
         quote! {
@@ -56,20 +68,27 @@ fn generate_column_decls(struct_info: &StructInfo, columns: &Columns) -> TokenSt
 }
 
 fn generate_row_value_decl(column: &Column) -> TokenStream {
-    let field_ident = &column.field_ident;
-    quote! {
-        let #field_ident = reader.read_row_value()?;
+    let var_ident = &column.variable_ident;
+    if column.optional {
+        let cond_ident = &column.condition_ident;
+        quote! {
+            let #var_ident = if #cond_ident {Some(reader.read_row_value()?)} else {None};
+        }
+    } else {
+        quote! {
+            let #var_ident = reader.read_row_value()?;
+        }
     }
 }
 
 fn generate_row_read(struct_info: &StructInfo, columns: &Columns) -> TokenStream {
     if columns.has_row {
         let row_ident = &struct_info.row_ident;
-        let field_idents: Vec<&Ident> = columns
+        let field_idents: Vec<TokenStream> = columns
             .columns
             .iter()
             .filter(|c| c.storage_type == ColumnStorageType::Rowed)
-            .map(|c| &c.field_ident)
+            .map(generate_field_init)
             .collect();
         let decls: Vec<TokenStream> = columns
             .columns
