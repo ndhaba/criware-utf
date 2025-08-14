@@ -1,3 +1,19 @@
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum ValueKind {
+    U8 = 0,
+    I8 = 1,
+    U16 = 2,
+    I16 = 3,
+    U32 = 4,
+    I32 = 5,
+    U64 = 6,
+    I64 = 7,
+    F32 = 8,
+    STR = 0xa,
+    BLOB = 0xb,
+}
+
 pub(crate) mod sealed {
     use std::collections::HashMap;
 
@@ -14,7 +30,7 @@ pub(crate) mod sealed {
 
         const SIZE_IN_UTF: usize = std::mem::size_of::<Self::Buffer>();
         const STORAGE_TYPE: StorageMethod;
-        const TYPE_FLAG: u8;
+        const TYPE_FLAG: super::ValueKind;
 
         unsafe fn parse_number(_data: Self::Buffer) -> Self {
             unsafe { std::hint::unreachable_unchecked() }
@@ -31,13 +47,13 @@ pub(crate) mod sealed {
     }
 
     macro_rules! impl_primitive_number {
-        ($($name:ident $flag:expr),+) => {
+        ($($name:ident $flag:ident),+) => {
             $(
                 impl Primitive for $name {
                     type Buffer = [u8; std::mem::size_of::<$name>()];
 
                     const STORAGE_TYPE: StorageMethod = StorageMethod::Number;
-                    const TYPE_FLAG: u8 = $flag;
+                    const TYPE_FLAG: super::ValueKind = super::ValueKind::$flag;
 
                     #[inline(always)]
                     unsafe fn parse_number(data: Self::Buffer) -> Self {
@@ -48,13 +64,13 @@ pub(crate) mod sealed {
         };
     }
 
-    impl_primitive_number!(u8 0, i8 1, u16 2, i16 3, u32 4, i32 5, u64 6, i64 7, f32 8);
+    impl_primitive_number!(u8 U8, i8 I8, u16 U16, i16 I16, u32 U32, i32 I32, u64 U64, i64 I64, f32 F32);
 
     impl Primitive for String {
         type Buffer = [u8; 4];
 
         const STORAGE_TYPE: StorageMethod = StorageMethod::String;
-        const TYPE_FLAG: u8 = 0xa;
+        const TYPE_FLAG: super::ValueKind = super::ValueKind::STR;
 
         #[inline(always)]
         unsafe fn parse_string(data: Self::Buffer, strings: &HashMap<u32, String>) -> Option<Self> {
@@ -66,7 +82,7 @@ pub(crate) mod sealed {
         type Buffer = [u8; 8];
 
         const STORAGE_TYPE: StorageMethod = StorageMethod::Blob;
-        const TYPE_FLAG: u8 = 0xb;
+        const TYPE_FLAG: super::ValueKind = super::ValueKind::BLOB;
 
         unsafe fn parse_blob(data: Self::Buffer, blob: &Vec<u8>) -> Option<Self> {
             // This is completely safe

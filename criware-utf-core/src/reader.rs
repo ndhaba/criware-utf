@@ -19,11 +19,11 @@ pub(crate) fn is_valid_storage_flag(half: u8) -> bool {
 
 macro_rules! handle_type_flag {
     ($type_flag:ident) => {
-        if $type_flag != <T::Primitive as Primitive>::TYPE_FLAG {
+        if $type_flag != <T::Primitive as Primitive>::TYPE_FLAG as u8 {
             if is_valid_value_flag($type_flag) {
                 return Err(Error::WrongColumnType(
                     $type_flag,
-                    <T::Primitive as Primitive>::TYPE_FLAG,
+                    <T::Primitive as Primitive>::TYPE_FLAG as u8,
                 ));
             } else {
                 return Err(Error::InvalidColumnType($type_flag));
@@ -213,13 +213,9 @@ impl Reader {
         handle_type_flag!(type_flag);
         handle_storage_flag!(storage_flag == "0x50": 0x10 => Ok(false), 0x50 => Ok(true))
     }
-    #[inline(always)]
-    pub fn read_row_value<T: Value>(&mut self) -> Result<T> {
-        self.read_raw_value(true)
-    }
-    pub fn read_raw_value<T: Value>(&mut self, rowed: bool) -> Result<T> {
+    pub fn read_raw_value<T: Value>(&mut self, row: bool) -> Result<T> {
         let mut buffer: <T::Primitive as Primitive>::Buffer = Default::default();
-        let reader = if rowed {
+        let reader = if row {
             &mut self.row_buffer
         } else {
             &mut self.column_buffer

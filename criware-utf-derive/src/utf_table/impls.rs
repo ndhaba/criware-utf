@@ -72,11 +72,11 @@ fn generate_row_value_decl(column: &Column) -> TokenStream {
     if column.optional {
         let cond_ident = &column.condition_ident;
         quote! {
-            let #var_ident = if #cond_ident {Some(reader.read_row_value()?)} else {None};
+            let #var_ident = if #cond_ident {Some(reader.read_raw_value(true)?)} else {None};
         }
     } else {
         quote! {
-            let #var_ident = reader.read_row_value()?;
+            let #var_ident = reader.read_raw_value(true)?;
         }
     }
 }
