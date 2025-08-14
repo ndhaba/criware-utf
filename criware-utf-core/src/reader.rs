@@ -8,6 +8,15 @@ use crate::{
     value::sealed::{Primitive, StorageMethod},
 };
 
+#[inline(always)]
+pub(crate) fn is_valid_value_flag(half: u8) -> bool {
+    half <= 8 || half == 0xa || half == 0xb
+}
+#[inline(always)]
+pub(crate) fn is_valid_storage_flag(half: u8) -> bool {
+    half == 0x10 || half == 0x30 || half == 0x50
+}
+
 trait IOErrorHelper<T> {
     fn io(self, message: impl AsRef<str>) -> Result<T>;
 }
@@ -33,14 +42,12 @@ pub struct Reader {
     row_buffer_size: usize,
     strings: HashMap<u32, String>,
     blobs: Vec<u8>,
+    table_name_index: u32,
+    field_count: u16,
 }
 
 impl Reader {
-    pub fn new(
-        reader: &mut impl Read,
-        table_name: &'static str,
-        field_count: u16,
-    ) -> Result<Reader> {
+    pub fn new(reader: &mut impl Read) -> Result<Reader> {
         let table_size = {
             let mut header = [0u8; 8];
             reader.read_exact(&mut header).io("@UTF header")?;
@@ -50,7 +57,7 @@ impl Reader {
             }
             u32::from_be(size)
         };
-        let (row_offset, string_offset, blob_offset, string_name, f_count, row_size, row_count) = {
+        let (row_offset, string_offset, blob_offset, string_name, field_count, row_size, row_count) = {
             if table_size < 24 {
                 return Err(Error::EOF("@UTF header".to_string()));
             }
@@ -67,9 +74,6 @@ impl Reader {
                 u32::from_be(rc),
             )
         };
-        if field_count != f_count {
-            return Err(Error::WrongTableSchema);
-        }
         if 24 > row_offset
             || row_offset > string_offset
             || string_offset > blob_offset
@@ -108,14 +112,8 @@ impl Reader {
             }
             strings
         };
-        if !strings.contains_key(&string_name) || strings.get(&string_name).unwrap() != table_name {
-            return Err(Error::WrongTableName(
-                strings
-                    .get(&string_name)
-                    .unwrap_or(&String::from("{unknown}"))
-                    .to_owned(),
-                table_name,
-            ));
+        if !strings.contains_key(&string_name) {
+            return Err(Error::MalformedHeader);
         }
         let mut blobs = vec![0u8; (table_size - blob_offset) as usize];
         reader.read_exact(&mut blobs).io("UTF blob data")?;
@@ -126,7 +124,15 @@ impl Reader {
             row_buffer_size,
             strings,
             blobs,
+            table_name_index: string_name,
+            field_count,
         })
+    }
+    pub fn field_count(&self) -> u16 {
+        self.field_count
+    }
+    pub fn table_name<'a>(&'a self) -> &'a str {
+        self.strings.get(&self.table_name_index).unwrap().as_str()
     }
     pub fn more_column_data(&self) -> bool {
         (self.column_buffer.position() as usize) < self.column_buffer_size
@@ -141,13 +147,21 @@ impl Reader {
             return Err(Error::WrongColumnName(column_name, name));
         }
         if flag & 0xf0 != 0x30 {
-            return Err(Error::WrongColumnStorage(flag & 0xf0, 0x30));
+            if is_valid_storage_flag(flag & 0xf0) {
+                return Err(Error::WrongColumnStorage(flag & 0xf0, 0x30));
+            } else {
+                return Err(Error::InvalidColumnStorage(flag & 0xf0));
+            }
         }
         if flag & 0x0f != <T::Primitive as Primitive>::TYPE_FLAG {
-            return Err(Error::WrongColumnType(
-                flag & 0x0f,
-                <T::Primitive as Primitive>::TYPE_FLAG,
-            ));
+            if is_valid_value_flag(flag & 0x0f) {
+                return Err(Error::WrongColumnType(
+                    flag & 0x0f,
+                    <T::Primitive as Primitive>::TYPE_FLAG,
+                ));
+            } else {
+                return Err(Error::InvalidColumnType(flag & 0x0f));
+            }
         }
         self.read_value(false)
     }
@@ -158,7 +172,11 @@ impl Reader {
             return Err(Error::WrongColumnName(column_name, name));
         }
         if flag & 0xf0 != 0x10 {
-            return Err(Error::WrongColumnStorage(flag & 0xf0, 0x10));
+            if is_valid_storage_flag(flag & 0xf0) {
+                return Err(Error::WrongColumnStorage(flag & 0xf0, 0x10));
+            } else {
+                return Err(Error::InvalidColumnStorage(flag & 0xf0));
+            }
         }
         Ok(())
     }
@@ -169,20 +187,28 @@ impl Reader {
             return Err(Error::WrongColumnName(column_name, name));
         }
         if flag & 0xf0 != 0x50 {
-            return Err(Error::WrongColumnStorage(flag & 0xf0, 0x50));
+            if is_valid_storage_flag(flag & 0xf0) {
+                return Err(Error::WrongColumnStorage(flag & 0xf0, 0x50));
+            } else {
+                return Err(Error::InvalidColumnStorage(flag & 0xf0));
+            }
         }
         if flag & 0x0f != <T::Primitive as Primitive>::TYPE_FLAG {
-            return Err(Error::WrongColumnType(
-                flag & 0x0f,
-                <T::Primitive as Primitive>::TYPE_FLAG,
-            ));
+            if is_valid_value_flag(flag & 0x0f) {
+                return Err(Error::WrongColumnType(
+                    flag & 0x0f,
+                    <T::Primitive as Primitive>::TYPE_FLAG,
+                ));
+            } else {
+                return Err(Error::InvalidColumnType(flag & 0x0f));
+            }
         }
         Ok(())
     }
     pub fn read_row_value<T: Value>(&mut self) -> Result<T> {
         self.read_value(true)
     }
-    fn read_value<T: Value>(&mut self, rowed: bool) -> Result<T> {
+    pub(crate) fn read_value<T: Value>(&mut self, rowed: bool) -> Result<T> {
         let mut buffer: <T::Primitive as Primitive>::Buffer = Default::default();
         let reader = if rowed {
             &mut self.row_buffer

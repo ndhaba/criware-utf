@@ -104,7 +104,10 @@ pub fn generate_read_fn(struct_info: &StructInfo, columns: &Columns) -> TokenStr
     }
     quote! {
         fn read(reader: &mut impl ::std::io::Read) -> ::std::result::Result<Self, ::criware_utf_core::Error> {
-            let mut reader = ::criware_utf_core::Reader::new(reader, #table_name, #field_count)?;
+            let mut reader = ::criware_utf_core::Reader::new(reader)?;
+            if reader.field_count() != #field_count || reader.table_name() != #table_name {
+                return ::std::result::Result::Err(::criware_utf_core::Error::WrongTableSchema);
+            }
             #column_decls
             #row_reading_code
             ::std::result::Result::Ok(#table_ident { #(#components),* })

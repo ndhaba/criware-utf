@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+pub mod debug;
 pub(crate) mod reader;
 pub(crate) mod table;
 pub(crate) mod value;
@@ -14,6 +15,10 @@ pub enum Error {
     BlobNotFound,
     #[error("reached end of file early (at {0})")]
     EOF(String),
+    #[error("invalid column storage flag: 0x{0:02}")]
+    InvalidColumnStorage(u8),
+    #[error("invalid column type flag: 0x{0:02}")]
+    InvalidColumnType(u8),
     #[error("i/o error: {0}")]
     IOError(std::io::Error),
     #[error("malformed header")]
@@ -30,8 +35,6 @@ pub enum Error {
     WrongColumnType(u8, u8),
     #[error("wrong column storage flag: 0x{0:02} (expected 0x{1:02})")]
     WrongColumnStorage(u8, u8),
-    #[error("wrong table name: \"{0}\" (expected \"{1}\")")]
-    WrongTableName(String, &'static str),
     #[error("wrong table schema")]
     WrongTableSchema,
 }
