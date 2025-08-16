@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "criware-utf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criware-utf-core",
  "criware-utf-derive",
@@ -12,14 +12,14 @@ dependencies = [
 
 [[package]]
 name = "criware-utf-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "criware-utf-derive"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criware-utf-core",
  "proc-macro2",

@@ -9,7 +9,7 @@ edition = "2024"
 proc-macro = true
 
 [dependencies]
-criware-utf-core = { version = "0.1.0", path = "../criware-utf-core" }
+criware-utf-core = { version = "0.2.0", path = "../criware-utf-core" }
 proc-macro2 = "1.0.96"
 quote = "1.0.40"
 syn = { version = "2.0.104", features = ["extra-traits"] }
