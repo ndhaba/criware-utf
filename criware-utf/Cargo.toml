@@ -1,8 +1,9 @@
 [package]
 name = "criware-utf"
-version = "0.1.0"
+description.workspace = true
+version.workspace = true
+license.workspace = true
 edition = "2024"
-license = "GPL-2.0-or-later"
 
 [dependencies]
 criware-utf-core = { version = "0.1.0", path = "../criware-utf-core" }
