@@ -77,12 +77,14 @@ fn parse_column(field: &Field, idx: usize) -> Result<Column> {
 pub struct Columns {
     pub has_constant: bool,
     pub has_row: bool,
+    pub has_optional_row: bool,
     pub columns: Vec<Column>,
 }
 
 pub fn parse_columns(struct_input: &DataStruct) -> Result<Columns> {
     let mut has_constant = false;
     let mut has_row = false;
+    let mut has_optional_row = false;
     let mut columns = Vec::new();
     let mut idx = 0;
     for field in &struct_input.fields {
@@ -93,6 +95,9 @@ pub fn parse_columns(struct_input: &DataStruct) -> Result<Columns> {
             }
             ColumnStorageType::Rowed => {
                 has_row = true;
+                if column.optional {
+                    has_optional_row = true;
+                }
             }
         }
         columns.push(column);
@@ -101,6 +106,7 @@ pub fn parse_columns(struct_input: &DataStruct) -> Result<Columns> {
     Ok(Columns {
         has_constant,
         has_row,
+        has_optional_row,
         columns,
     })
 }

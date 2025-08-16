@@ -46,17 +46,16 @@ macro_rules! handle_storage_flag {
     };
 }
 
-trait IOErrorHelper<T> {
-    fn io(self, message: impl AsRef<str>) -> Result<T>;
+pub(crate) trait IOErrorHelper<T> {
+    fn io(self, message: &str) -> Result<T>;
 }
-impl<T> IOErrorHelper<T> for std::io::Result<T> {
-    #[inline(always)]
-    fn io(self, message: impl AsRef<str>) -> Result<T> {
+impl IOErrorHelper<()> for std::io::Result<()> {
+    fn io(self, message: &str) -> Result<()> {
         match self {
             Ok(value) => Ok(value),
             Err(error) => match error.kind() {
                 std::io::ErrorKind::UnexpectedEof => {
-                    return Err(Error::EOF(message.as_ref().to_owned()));
+                    return Err(Error::EOF(message.to_owned()));
                 }
                 _ => return Err(Error::IOError(error)),
             },
@@ -76,7 +75,7 @@ pub struct Reader {
 }
 
 impl Reader {
-    pub fn new(reader: &mut impl Read) -> Result<Reader> {
+    pub fn new(reader: &mut dyn Read) -> Result<Reader> {
         let table_size = {
             let mut header = [0u8; 8];
             reader.read_exact(&mut header).io("@UTF header")?;
@@ -86,21 +85,22 @@ impl Reader {
             }
             u32::from_be(size)
         };
-        let (row_offset, string_offset, blob_offset, string_name, field_count, row_size, row_count) = {
+        let (row_offset, string_offset, blob_offset, table_name, field_count, row_size, row_count) = {
             if table_size < 24 {
                 return Err(Error::EOF("@UTF header".to_string()));
             }
             let mut header = [0u8; 24];
             reader.read_exact(&mut header).io("@UTF header")?;
-            let (ro, so, bo, sn, fc, rs, rc) = unsafe { std::mem::transmute(header) };
+            let result: (u32, u32, u32, u32, u16, u16, u32) =
+                unsafe { std::mem::transmute(header) };
             (
-                u32::from_be(ro),
-                u32::from_be(so),
-                u32::from_be(bo),
-                u32::from_be(sn),
-                u16::from_be(fc),
-                u16::from_be(rs),
-                u32::from_be(rc),
+                u32::from_be(result.0),
+                u32::from_be(result.1),
+                u32::from_be(result.2),
+                u32::from_be(result.3),
+                u16::from_be(result.4),
+                u16::from_be(result.5),
+                u32::from_be(result.6),
             )
         };
         if 24 > row_offset
@@ -141,7 +141,7 @@ impl Reader {
             }
             strings
         };
-        if !strings.contains_key(&string_name) {
+        if !strings.contains_key(&table_name) {
             return Err(Error::MalformedHeader);
         }
         let mut blobs = vec![0u8; (table_size - blob_offset) as usize];
@@ -153,7 +153,7 @@ impl Reader {
             row_buffer_size,
             strings,
             blobs,
-            table_name_index: string_name,
+            table_name_index: table_name,
             field_count,
         })
     }
@@ -232,16 +232,16 @@ impl Reader {
                 _ => return Err(Error::IOError(error)),
             },
         };
-        let primitive = match <T::Primitive as Primitive>::STORAGE_TYPE {
-            StorageMethod::Number => unsafe { <T::Primitive as Primitive>::parse_number(buffer) },
+        let primitive: <T as Value>::Primitive = match <T::Primitive as Primitive>::STORAGE_TYPE {
+            StorageMethod::Number => <T::Primitive as Primitive>::parse_number(buffer),
             StorageMethod::String => {
-                match unsafe { <T::Primitive as Primitive>::parse_string(buffer, &self.strings) } {
+                match <T::Primitive as Primitive>::parse_string(buffer, &self.strings) {
                     Some(string) => string,
                     None => return Err(Error::StringNotFound),
                 }
             }
             StorageMethod::Blob => {
-                match unsafe { <T::Primitive as Primitive>::parse_blob(buffer, &self.blobs) } {
+                match <T::Primitive as Primitive>::parse_blob(buffer, &self.blobs) {
                     Some(blob) => blob,
                     None => return Err(Error::BlobNotFound),
                 }

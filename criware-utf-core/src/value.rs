@@ -15,7 +15,7 @@ pub enum ValueKind {
 }
 
 pub(crate) mod sealed {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, hint::unreachable_unchecked, mem::transmute};
 
     #[derive(Clone, Copy, PartialEq, Eq)]
     pub enum StorageMethod {
@@ -26,23 +26,33 @@ pub(crate) mod sealed {
 
     #[doc(hidden)]
     pub trait Primitive: Sized {
-        type Buffer: AsMut<[u8]> + Default;
+        type Buffer: AsRef<[u8]> + AsMut<[u8]> + Default;
 
         const SIZE_IN_UTF: usize = std::mem::size_of::<Self::Buffer>();
         const STORAGE_TYPE: StorageMethod;
         const TYPE_FLAG: super::ValueKind;
 
-        unsafe fn parse_number(_data: Self::Buffer) -> Self {
-            unsafe { std::hint::unreachable_unchecked() }
+        fn parse_number(_data: Self::Buffer) -> Self {
+            unsafe { unreachable_unchecked() }
         }
-        unsafe fn parse_string(
-            _data: Self::Buffer,
-            _strings: &HashMap<u32, String>,
-        ) -> Option<Self> {
-            unsafe { std::hint::unreachable_unchecked() }
+        fn parse_string(_data: Self::Buffer, _strs: &HashMap<u32, String>) -> Option<Self> {
+            unsafe { unreachable_unchecked() }
         }
-        unsafe fn parse_blob(_data: Self::Buffer, _blob: &Vec<u8>) -> Option<Self> {
-            unsafe { std::hint::unreachable_unchecked() }
+        fn parse_blob(_data: Self::Buffer, _blob: &Vec<u8>) -> Option<Self> {
+            unsafe { unreachable_unchecked() }
+        }
+        fn write_number(&self) -> Self::Buffer {
+            unsafe { unreachable_unchecked() }
+        }
+        fn write_string(
+            &self,
+            _strings: &mut HashMap<String, u32>,
+            _string_buffer: &mut Vec<u8>,
+        ) -> Self::Buffer {
+            unsafe { unreachable_unchecked() }
+        }
+        fn write_blob(&self, _blobs: &mut Vec<u8>) -> Self::Buffer {
+            unsafe { unreachable_unchecked() }
         }
     }
 
@@ -56,8 +66,12 @@ pub(crate) mod sealed {
                     const TYPE_FLAG: super::ValueKind = super::ValueKind::$flag;
 
                     #[inline(always)]
-                    unsafe fn parse_number(data: Self::Buffer) -> Self {
+                    fn parse_number(data: Self::Buffer) -> Self {
                         $name::from_be_bytes(data)
+                    }
+                    #[inline(always)]
+                    fn write_number(&self) -> Self::Buffer {
+                        self.to_be_bytes()
                     }
                 }
             )*
@@ -73,8 +87,24 @@ pub(crate) mod sealed {
         const TYPE_FLAG: super::ValueKind = super::ValueKind::STR;
 
         #[inline(always)]
-        unsafe fn parse_string(data: Self::Buffer, strings: &HashMap<u32, String>) -> Option<Self> {
+        fn parse_string(data: Self::Buffer, strings: &HashMap<u32, String>) -> Option<Self> {
             strings.get(&u32::from_be_bytes(data)).map(|v| v.clone())
+        }
+        fn write_string(
+            &self,
+            strings: &mut HashMap<String, u32>,
+            string_buffer: &mut Vec<u8>,
+        ) -> Self::Buffer {
+            match strings.get(self) {
+                Some(idx) => (*idx).to_be_bytes(),
+                None => {
+                    let position = string_buffer.len() as u32;
+                    string_buffer.extend_from_slice(self.as_bytes());
+                    string_buffer.push(0u8);
+                    strings.insert(self.clone(), position);
+                    position.to_be_bytes()
+                }
+            }
         }
     }
 
@@ -84,11 +114,11 @@ pub(crate) mod sealed {
         const STORAGE_TYPE: StorageMethod = StorageMethod::Blob;
         const TYPE_FLAG: super::ValueKind = super::ValueKind::BLOB;
 
-        unsafe fn parse_blob(data: Self::Buffer, blob: &Vec<u8>) -> Option<Self> {
+        fn parse_blob(data: Self::Buffer, blob: &Vec<u8>) -> Option<Self> {
             // This is completely safe
             // This splits the [u8; 8] into a left and right [u8; 4],
             // which works on any platform regardless of endianness
-            let (b1, b2): ([u8; 4], [u8; 4]) = unsafe { std::mem::transmute(data) };
+            let (b1, b2): ([u8; 4], [u8; 4]) = unsafe { transmute(data) };
             // safe code
             let idx = u32::from_be_bytes(b1) as usize;
             let len = u32::from_be_bytes(b2) as usize;
@@ -98,6 +128,12 @@ pub(crate) mod sealed {
             } else {
                 Some(blob[idx..end].into())
             }
+        }
+        fn write_blob(&self, data: &mut Vec<u8>) -> Self::Buffer {
+            let idx = (data.len() as u32).to_be();
+            let len = (self.len() as u32).to_be();
+            data.extend(self);
+            unsafe { transmute((idx, len)) }
         }
     }
 }
@@ -118,7 +154,7 @@ pub trait Value: Sized {
     type Primitive: Primitive;
 
     fn from_utf_value(value: Self::Primitive) -> Result<Self, Box<dyn std::error::Error>>;
-    fn to_utf_value(self) -> Self::Primitive;
+    fn to_utf_value<'a>(&'a self) -> Result<&'a Self::Primitive, Box<dyn std::error::Error>>;
 }
 
 impl<T: Primitive> Value for T {
@@ -129,8 +165,8 @@ impl<T: Primitive> Value for T {
         Ok(value)
     }
     #[inline(always)]
-    fn to_utf_value(self) -> Self::Primitive {
-        self
+    fn to_utf_value<'a>(&'a self) -> Result<&'a Self::Primitive, Box<dyn std::error::Error>> {
+        Ok(&self)
     }
 }
 

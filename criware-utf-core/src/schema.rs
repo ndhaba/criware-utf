@@ -56,8 +56,8 @@ impl Reader {
     }
 }
 
-impl crate::table::Table for Schema {
-    fn read(reader: &mut impl std::io::Read) -> Result<Self> {
+impl Schema {
+    pub fn read(reader: &mut dyn std::io::Read) -> Result<Self> {
         let mut reader = Reader::new(reader)?;
         let mut columns = Vec::new();
         while reader.more_column_data() {

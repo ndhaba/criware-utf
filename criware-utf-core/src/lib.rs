@@ -4,11 +4,13 @@ mod reader;
 mod schema;
 mod table;
 mod value;
+mod writer;
 
 pub use crate::reader::Reader;
 pub use crate::schema::{Schema, SchemaColumn};
 pub use crate::table::Table;
 pub use crate::value::{Primitive, Value, ValueKind, utf_size_of};
+pub use crate::writer::{WriteContext, Writer};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -28,6 +30,8 @@ pub enum Error {
     StringMalformed(std::str::Utf8Error),
     #[error("string not found")]
     StringNotFound,
+    #[error("optional column conflict: \"{0}\" (values must be all Some or all None)")]
+    OptionalColumnConflict(&'static str),
     #[error("failed to convert {0} to {1}: {2}")]
     ValueConversion(&'static str, &'static str, Box<dyn std::error::Error>),
     #[error("wrong column name: \"{0}\" (expected \"{1}\"")]

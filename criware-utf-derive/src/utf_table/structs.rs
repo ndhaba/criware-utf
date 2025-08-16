@@ -65,6 +65,11 @@ pub fn generate_structs(struct_info: &StructInfo, columns: &Columns) -> TokenStr
             rows: ::std::vec::Vec<#ident>
         });
     }
+    if columns.has_optional_row {
+        components.push(quote! {
+            write_context: ::criware_utf_core::WriteContext
+        });
+    }
     let core_ident = &struct_info.table_ident;
     let vis = &struct_info.vis;
     structs.push(quote! {
