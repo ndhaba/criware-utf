@@ -12,6 +12,8 @@ macro_rules! syn_error {
 mod utf_table;
 mod utils;
 
+/// Macro for arranging a table and implementing useful `Table` behavior
+///
 #[proc_macro_attribute]
 pub fn utf_table(attr: TokenStream, item: TokenStream) -> TokenStream {
     match utf_table::parse(attr.into(), item.into()) {

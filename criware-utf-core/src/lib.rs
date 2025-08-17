@@ -7,11 +7,13 @@ mod value;
 mod writer;
 
 pub use crate::reader::Reader;
-pub use crate::schema::{Schema, SchemaColumn};
+pub use crate::schema::{ColumnStorageFormat, Schema, SchemaColumn};
 pub use crate::table::Table;
 pub use crate::value::{Primitive, Value, ValueKind, utf_size_of};
 pub use crate::writer::{WriteContext, Writer};
 
+/// Error returned when a table can't be read or written
+///
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("blob not found")]
@@ -44,4 +46,6 @@ pub enum Error {
     WrongTableSchema,
 }
 
+/// A typedef of the result returned by much of the crate.
+///
 pub type Result<T> = std::result::Result<T, Error>;

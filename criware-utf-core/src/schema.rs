@@ -1,12 +1,25 @@
 use crate::{Error, Reader, Result, ValueKind};
 
-#[derive(Debug, Clone)]
-pub enum SchemaColumn {
-    Zero(String, ValueKind),
-    Constant(String, ValueKind),
-    Rowed(String, ValueKind),
+/// The possible ways a column can store data
+///
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColumnStorageFormat {
+    Zero,
+    Constant,
+    Rowed,
 }
 
+/// Representation of a column of a table (data not included)
+///
+#[derive(Debug, Clone)]
+pub struct SchemaColumn {
+    pub name: String,
+    pub storage_format: ColumnStorageFormat,
+    pub value_kind: ValueKind,
+}
+
+/// Representation of a table's schema
+///
 #[derive(Debug)]
 pub struct Schema {
     pub table_name: String,
@@ -32,7 +45,11 @@ impl Reader {
             v => return Err(Error::InvalidColumnType(v)),
         };
         match flag & 0xf0 {
-            0x10 => Ok(SchemaColumn::Zero(column_name, value_kind)),
+            0x10 => Ok(SchemaColumn {
+                name: column_name,
+                storage_format: ColumnStorageFormat::Zero,
+                value_kind,
+            }),
             0x30 => {
                 match value_kind {
                     ValueKind::U8 | ValueKind::I8 => {
@@ -48,15 +65,32 @@ impl Reader {
                         self.read_raw_value::<u64>(false)?;
                     }
                 };
-                Ok(SchemaColumn::Constant(column_name, value_kind))
+                Ok(SchemaColumn {
+                    name: column_name,
+                    storage_format: ColumnStorageFormat::Constant,
+                    value_kind,
+                })
             }
-            0x50 => Ok(SchemaColumn::Rowed(column_name, value_kind)),
+            0x50 => Ok(SchemaColumn {
+                name: column_name,
+                storage_format: ColumnStorageFormat::Rowed,
+                value_kind,
+            }),
             v => Err(Error::InvalidColumnStorage(v)),
         }
     }
 }
 
 impl Schema {
+    pub fn has_column(&self, name: &str) -> bool {
+        for column in &self.columns {
+            if column.name == name {
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn read(reader: &mut dyn std::io::Read) -> Result<Self> {
         let mut reader = Reader::new(reader)?;
         let mut columns = Vec::new();

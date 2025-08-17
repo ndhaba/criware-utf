@@ -63,6 +63,8 @@ impl IOErrorHelper<()> for std::io::Result<()> {
     }
 }
 
+/// Abstraction layer for reading UTF tables
+///
 pub struct Reader {
     column_buffer: Cursor<Vec<u8>>,
     column_buffer_size: usize,

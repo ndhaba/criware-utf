@@ -6,6 +6,8 @@ use crate::{
     value::sealed::{Primitive, StorageMethod},
 };
 
+/// Extra contextual info for accurating recreating read tables when writing
+///
 pub struct WriteContext(HashMap<&'static str, bool>);
 
 impl WriteContext {
@@ -23,6 +25,8 @@ impl WriteContext {
     }
 }
 
+/// Abstraction layer for writing UTF tables
+///
 pub struct Writer {
     column_data: Vec<u8>,
     row_data: Vec<u8>,

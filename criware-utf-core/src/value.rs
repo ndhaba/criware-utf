@@ -1,3 +1,5 @@
+/// All of the primitives that can be stored in a table
+///
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum ValueKind {
@@ -146,10 +148,14 @@ macro_rules! blanket_impl {
     };
 }
 
+/// A value that can be directly stored in a table (sealed)
+///
 pub trait Primitive: sealed::Primitive {}
 
 blanket_impl!(Primitive for u8, u16, u32, u64, i8, i16, i32, i64, f32, String, Vec<u8>);
 
+/// A value that can be stored, but must be converted first
+///
 pub trait Value: Sized + Default {
     type Primitive: Primitive;
 
@@ -170,6 +176,8 @@ impl<T: Primitive> Value for T {
     }
 }
 
+/// Returns the space (in bytes) a value would take up in column/row space
+///
 #[inline(always)]
 pub const fn utf_size_of<T: Value>() -> usize {
     <T::Primitive as sealed::Primitive>::SIZE_IN_UTF
