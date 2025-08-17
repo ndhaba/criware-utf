@@ -72,3 +72,11 @@ pub fn use_meta_path(attr: &syn::Attribute, name: &str) -> Result<()> {
         )
     }
 }
+
+pub fn get_zero_or_one_ident(attr: &syn::Attribute, name: &str) -> Result<Option<Ident>> {
+    match &attr.meta {
+        Meta::Path(_) => Ok(None),
+        Meta::List(list) => Ok(Some(list.parse_args::<Ident>()?)),
+        _ => syn_error!(attr.span(), format!("Incorrect usage of \"{name}\"")),
+    }
+}

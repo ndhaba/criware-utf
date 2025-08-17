@@ -25,7 +25,7 @@ pub(crate) mod sealed {
     }
 
     #[doc(hidden)]
-    pub trait Primitive: Sized {
+    pub trait Primitive: Sized + Default {
         type Buffer: AsRef<[u8]> + AsMut<[u8]> + Default;
 
         const SIZE_IN_UTF: usize = std::mem::size_of::<Self::Buffer>();
@@ -150,7 +150,7 @@ pub trait Primitive: sealed::Primitive {}
 
 blanket_impl!(Primitive for u8, u16, u32, u64, i8, i16, i32, i64, f32, String, Vec<u8>);
 
-pub trait Value: Sized {
+pub trait Value: Sized + Default {
     type Primitive: Primitive;
 
     fn from_utf_value(value: Self::Primitive) -> Result<Self, Box<dyn std::error::Error>>;

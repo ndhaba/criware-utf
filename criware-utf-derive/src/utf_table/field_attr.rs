@@ -13,7 +13,7 @@ pub struct Column {
     pub field_ident: Ident,
     pub column_name: String,
     pub storage_type: ColumnStorageType,
-    pub optional: bool,
+    pub optional: Option<bool>,
     pub ty: Type,
     pub vis: Visibility,
     pub variable_ident: Ident,
@@ -22,7 +22,7 @@ pub struct Column {
 
 fn parse_column(field: &Field, idx: usize) -> Result<Column> {
     let mut storage_type = None;
-    let mut optional = false;
+    let mut optional = None;
     let mut column_name = None;
     for attr in &field.attrs {
         let name = get_attribute_name(&attr)?;
@@ -40,10 +40,24 @@ fn parse_column(field: &Field, idx: usize) -> Result<Column> {
             "constant" => set_storage_type!("constant" => Constant),
             "rowed" => set_storage_type!("rowed" => Rowed),
             "optional" => {
-                if optional {
+                if optional.is_some() {
                     syn_error!(attr.span(), "Duplicate attribute");
                 } else {
-                    optional = true;
+                    optional = match get_zero_or_one_ident(attr, "optional")? {
+                        Some(ident) => {
+                            if ident == "include" {
+                                Some(true)
+                            } else if ident == "exclude" {
+                                Some(false)
+                            } else {
+                                syn_error!(
+                                    ident.span(),
+                                    "Unknown specifier. Expected include or exclude"
+                                );
+                            }
+                        }
+                        None => Some(false),
+                    };
                 }
             }
             "column_name" => {
@@ -95,7 +109,7 @@ pub fn parse_columns(struct_input: &DataStruct) -> Result<Columns> {
             }
             ColumnStorageType::Rowed => {
                 has_row = true;
-                if column.optional {
+                if column.optional.is_some() {
                     has_optional_row = true;
                 }
             }

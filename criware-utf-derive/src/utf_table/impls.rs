@@ -17,7 +17,7 @@ mod read {
             ColumnStorageType::Constant => {
                 let column_name = &column.column_name;
                 let var_ident = &column.variable_ident;
-                if column.optional {
+                if column.optional.is_some() {
                     quote! {
                         let #var_ident = reader.read_column_constant_opt(#column_name)?;
                     }
@@ -30,7 +30,7 @@ mod read {
             ColumnStorageType::Rowed => {
                 let column_name = &column.column_name;
                 let ty = &column.ty;
-                if column.optional {
+                if column.optional.is_some() {
                     let cond_ident = &column.condition_ident;
                     quote! {
                         let #cond_ident = reader.read_column_rowed_opt::<#ty>(#column_name)?;
@@ -74,7 +74,7 @@ mod read {
 
     fn read_row_value(column: &Column) -> TokenStream {
         let var_ident = &column.variable_ident;
-        if column.optional {
+        if column.optional.is_some() {
             let cond_ident = &column.condition_ident;
             quote! {
                 let #var_ident = if #cond_ident {
@@ -120,7 +120,9 @@ mod read {
             let context_additions = columns
                 .columns
                 .iter()
-                .filter(|column| column.optional && column.storage_type == ColumnStorageType::Rowed)
+                .filter(|column| {
+                    column.optional.is_some() && column.storage_type == ColumnStorageType::Rowed
+                })
                 .map(|column| {
                     let column_name = &column.column_name;
                     let cond_ident = &column.condition_ident;
@@ -169,6 +171,99 @@ mod read {
     }
 }
 
+mod new {
+    use proc_macro2::{Span, TokenStream};
+    use quote::quote;
+    use syn::Ident;
+
+    use crate::utf_table::{
+        field_attr::{ColumnStorageType, Columns},
+        main_attr::StructInfo,
+    };
+
+    fn constants(struct_info: &StructInfo, columns: &Columns) -> TokenStream {
+        let cond_ident = &struct_info.constants_ident;
+        let components = columns.columns.iter().filter(|column| column.storage_type == ColumnStorageType::Constant).map(|column| {
+            let field_ident = &column.field_ident;
+            match &column.optional  {
+                Some(included) => {
+                    if *included {
+                        quote! {
+                            #field_ident: ::std::option::Option::Some(::std::default::Default::default())
+                        }
+                    } else {
+                        quote! {
+                            #field_ident: ::std::option::Option::None
+                        }
+                    }
+                }
+                None => quote! {
+                    #field_ident: ::std::default::Default::default()
+                }
+            }
+        });
+        quote! {
+            let constants = #cond_ident {
+                #(#components),*
+            };
+        }
+    }
+
+    pub fn fn_new(struct_info: &StructInfo, columns: &Columns) -> TokenStream {
+        let mut components = Vec::new();
+        let constants = {
+            if columns.has_constant {
+                components.push(Ident::new("constants", Span::call_site()));
+                constants(struct_info, columns)
+            } else {
+                TokenStream::new()
+            }
+        };
+        let rows = {
+            if columns.has_row {
+                components.push(Ident::new("rows", Span::call_site()));
+                quote! {
+                    let rows = ::std::vec::Vec::new();
+                }
+            } else {
+                TokenStream::new()
+            }
+        };
+        let write_context = {
+            if columns.has_optional_row {
+                components.push(Ident::new("write_context", Span::call_site()));
+                let inclusions = columns
+                    .columns
+                    .iter()
+                    .filter(|column| {
+                        column.storage_type == ColumnStorageType::Rowed && column.optional.is_some()
+                    })
+                    .map(|column| {
+                        let column_name = &column.column_name;
+                        let included = column.optional.unwrap();
+                        quote! {
+                            write_context.set_inclusion_state(#column_name, #included);
+                        }
+                    });
+                quote! {
+                    let mut write_context = ::criware_utf_core::WriteContext::new();
+                    #(#inclusions)*
+                }
+            } else {
+                TokenStream::new()
+            }
+        };
+        quote! {
+            fn new() -> Self {
+                #constants
+                #rows
+                #write_context
+                Self {#(#components),*}
+            }
+        }
+    }
+}
+
 mod write {
     use proc_macro2::{Span, TokenStream};
     use quote::quote;
@@ -184,7 +279,7 @@ mod write {
         let field_ident = &column.field_ident;
         if column.storage_type == ColumnStorageType::Constant {
             let fn_ident = Ident::new(
-                if column.optional {
+                if column.optional.is_some() {
                     "push_constant_column_opt"
                 } else {
                     "push_constant_column"
@@ -197,7 +292,7 @@ mod write {
         } else {
             let ty = &column.ty;
             let cond_ident = &column.condition_ident;
-            if column.optional {
+            if column.optional.is_some() {
                 quote! {
                     let #cond_ident = if self.rows.is_empty() {
                         self.write_context.is_included(#column_name)
@@ -216,7 +311,7 @@ mod write {
 
     fn write_row_value(column: &Column) -> TokenStream {
         let field_ident = &column.field_ident;
-        if column.optional {
+        if column.optional.is_some() {
             let cond_ident = &column.condition_ident;
             let name = &column.column_name;
             quote! {
@@ -290,10 +385,12 @@ mod write {
 
 pub fn impl_table(struct_info: &StructInfo, columns: &Columns) -> TokenStream {
     let ident = &struct_info.table_ident;
+    let new_fn = new::fn_new(struct_info, columns);
     let read_fn = read::fn_read(struct_info, columns);
     let write_fn = write::fn_write(struct_info, columns);
     quote! {
         impl ::criware_utf_core::Table for #ident {
+            #new_fn
             #read_fn
             #write_fn
         }
