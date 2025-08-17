@@ -131,7 +131,7 @@ mod read {
                     }
                 });
             quote! {
-                let mut write_context = ::criware_utf_core::WriteContext::new();
+                let mut write_context = ::criware_utf::WriteContext::new();
                 #(#context_additions)*
             }
         } else {
@@ -157,10 +157,10 @@ mod read {
             components.push(format_ident!("write_context"));
         }
         quote! {
-            fn read(reader: &mut dyn ::std::io::Read) -> ::std::result::Result<Self, ::criware_utf_core::Error> {
-                let mut reader = ::criware_utf_core::Reader::new(reader)?;
+            fn read(reader: &mut dyn ::std::io::Read) -> ::std::result::Result<Self, ::criware_utf::Error> {
+                let mut reader = ::criware_utf::Reader::new(reader)?;
                 if reader.field_count() != #field_count || reader.table_name() != #table_name {
-                    return ::std::result::Result::Err(::criware_utf_core::Error::WrongTableSchema);
+                    return ::std::result::Result::Err(::criware_utf::Error::WrongTableSchema);
                 }
                 #column_code
                 #context_code
@@ -246,7 +246,7 @@ mod new {
                         }
                     });
                 quote! {
-                    let mut write_context = ::criware_utf_core::WriteContext::new();
+                    let mut write_context = ::criware_utf::WriteContext::new();
                     #(#inclusions)*
                 }
             } else {
@@ -316,7 +316,7 @@ mod write {
             let name = &column.column_name;
             quote! {
                 if #cond_ident != row.#field_ident.is_some() {
-                    return ::std::result::Result::Err(::criware_utf_core::Error::OptionalColumnConflict(#name));
+                    return ::std::result::Result::Err(::criware_utf::Error::OptionalColumnConflict(#name));
                 } else if #cond_ident {
                     table_writer.write_raw_value(true, row.#field_ident.as_ref().unwrap())?;
                 }
@@ -353,8 +353,15 @@ mod write {
                 .filter(|column| column.storage_type == ColumnStorageType::Rowed)
                 .map(|column| {
                     let ty = &column.ty;
-                    quote! {
-                        ::criware_utf_core::utf_size_of::<#ty>()
+                    if column.optional.is_some() {
+                        let cond_ident = &column.condition_ident;
+                        quote! {
+                            if #cond_ident {::criware_utf::utf_size_of::<#ty>()} else {0}
+                        }
+                    } else {
+                        quote! {
+                            ::criware_utf::utf_size_of::<#ty>()
+                        }
                     }
                 });
             quote! {
@@ -373,8 +380,8 @@ mod write {
         let row_code = write_rows(columns);
         let end_code = end(columns);
         quote! {
-            fn write(&self, writer: &mut dyn ::std::io::Write) -> ::std::result::Result<(), ::criware_utf_core::Error> {
-                let mut table_writer = ::criware_utf_core::Writer::new(#table_name);
+            fn write(&self, writer: &mut dyn ::std::io::Write) -> ::std::result::Result<(), ::criware_utf::Error> {
+                let mut table_writer = ::criware_utf::Writer::new(#table_name);
                 #(#column_code)*
                 #row_code
                 #end_code
@@ -389,7 +396,7 @@ pub fn impl_table(struct_info: &StructInfo, columns: &Columns) -> TokenStream {
     let read_fn = read::fn_read(struct_info, columns);
     let write_fn = write::fn_write(struct_info, columns);
     quote! {
-        impl ::criware_utf_core::Table for #ident {
+        impl ::criware_utf::Table for #ident {
             #new_fn
             #read_fn
             #write_fn

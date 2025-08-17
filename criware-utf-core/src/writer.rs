@@ -53,9 +53,12 @@ impl Writer {
         if self.row_data.len() != (row_size as usize) * (row_count as usize) {
             return Err(Error::MalformedHeader);
         }
+        let zeroes = [0u8; 8];
         let row_offset = self.column_data.len() as u32 + 24;
         let string_offset = row_offset + self.row_data.len() as u32;
-        let blob_offset = string_offset + self.string_data.len() as u32;
+        let mut blob_offset = string_offset + self.string_data.len() as u32;
+        let blob_offset_remainder = 8 - (blob_offset & 7);
+        blob_offset += blob_offset_remainder;
         let table_name: u32 = 7;
         let table_size = blob_offset + self.blobs.len() as u32;
         writer.write_all(b"@UTF").io("@UTF header")?;
@@ -86,6 +89,9 @@ impl Writer {
         writer.write_all(&self.column_data).io("UTF column data")?;
         writer.write_all(&self.row_data).io("UTF row data")?;
         writer.write_all(&self.string_data).io("UTF string data")?;
+        writer
+            .write_all(&zeroes[0..(blob_offset_remainder as usize)])
+            .io("UTF string data")?;
         writer.write_all(&self.blobs).io("UTF blobs")?;
         Ok(())
     }

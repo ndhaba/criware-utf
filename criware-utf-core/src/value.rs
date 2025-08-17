@@ -123,7 +123,7 @@ pub(crate) mod sealed {
             let idx = u32::from_be_bytes(b1) as usize;
             let len = u32::from_be_bytes(b2) as usize;
             let end = idx + len;
-            if end >= blob.len() {
+            if end > blob.len() {
                 None
             } else {
                 Some(blob[idx..end].into())
