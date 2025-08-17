@@ -1,5 +1,5 @@
 [package]
-name = "criware-utf-derive"
+name = "criware-utf-macros"
 description = "Procedural macros for parsing/writing UTF tables used in CRIWARE CPK files"
 version.workspace = true
 license.workspace = true

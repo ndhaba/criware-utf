@@ -7,7 +7,7 @@ name = "criware-utf"
 version = "0.2.0"
 dependencies = [
  "criware-utf-core",
- "criware-utf-derive",
+ "criware-utf-macros",
 ]
 
 [[package]]
@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "criware-utf-derive"
+name = "criware-utf-macros"
 version = "0.2.0"
 dependencies = [
  "criware-utf-core",

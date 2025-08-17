@@ -7,4 +7,4 @@ edition = "2024"
 
 [dependencies]
 criware-utf-core = { version = "0.2.0", path = "../criware-utf-core" }
-criware-utf-derive = { version = "0.2.0", path = "../criware-utf-derive" }
+criware-utf-macros = { version = "0.2.0", path = "../criware-utf-macros" }
