@@ -50,16 +50,14 @@ pub(crate) mod sealed {
 
                     const TYPE_FLAG: super::ValueKind = super::ValueKind::$flag;
 
-                    #[inline(always)]
-                    fn parse<'a>(
+                                    fn parse<'a>(
                         data: Self::Buffer,
                         _: &HashMap<u32, String>,
                         _: &Vec<u8>,
                     ) -> Option<Self> {
                         Some($name::from_be_bytes(data))
                     }
-                    #[inline(always)]
-                    fn write<'a>(
+                                    fn write<'a>(
                         value: Cow<'a, Self>,
                         _: &mut HashMap<Cow<'a, str>, u32>,
                         _: &mut Vec<u8>,
@@ -209,12 +207,10 @@ macro_rules! impl_value_number {
             impl Value for $type {
                 type Primitive = $type;
 
-                #[inline(always)]
-                fn from_primitive(value: Self) -> BoxRes<Self> {
+                            fn from_primitive(value: Self) -> BoxRes<Self> {
                     Ok(value)
                 }
-                #[inline(always)]
-                fn to_primitive<'a>(&'a self) -> BoxRes<Cow<'a, Self::Primitive>> {
+                            fn to_primitive<'a>(&'a self) -> BoxRes<Cow<'a, Self::Primitive>> {
                     Ok(Cow::Owned(*self))
                 }
             }
@@ -227,11 +223,9 @@ impl_value_number!(u8, u16, u32, u64, i8, i16, i32, i64, f32);
 impl Value for String {
     type Primitive = str;
 
-    #[inline(always)]
     fn from_primitive(value: String) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(value)
     }
-    #[inline(always)]
     fn to_primitive<'a>(&'a self) -> Result<Cow<'a, Self::Primitive>, Box<dyn std::error::Error>> {
         Ok(Cow::Borrowed(self.as_str()))
     }
@@ -240,11 +234,9 @@ impl Value for String {
 impl Value for Vec<u8> {
     type Primitive = [u8];
 
-    #[inline(always)]
     fn from_primitive(value: Vec<u8>) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(value)
     }
-    #[inline(always)]
     fn to_primitive<'a>(&'a self) -> Result<Cow<'a, Self::Primitive>, Box<dyn std::error::Error>> {
         Ok(Cow::Borrowed(self.as_slice()))
     }
@@ -253,11 +245,9 @@ impl Value for Vec<u8> {
 impl Value for Box<[u8]> {
     type Primitive = [u8];
 
-    #[inline(always)]
     fn from_primitive(value: Vec<u8>) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(value.into_boxed_slice())
     }
-    #[inline(always)]
     fn to_primitive<'a>(&'a self) -> Result<Cow<'a, Self::Primitive>, Box<dyn std::error::Error>> {
         Ok(Cow::Borrowed(&self))
     }
@@ -272,7 +262,6 @@ impl<const N: usize> Value for [u8; N] {
             Err(_) => Err(crate::Error::BlobWrongSize.into()),
         }
     }
-    #[inline(always)]
     fn to_primitive<'a>(&'a self) -> Result<Cow<'a, Self::Primitive>, Box<dyn std::error::Error>> {
         Ok(Cow::Borrowed(self))
     }
@@ -312,7 +301,6 @@ fn main() {
 }
 ```
 */
-#[inline(always)]
 pub const fn utf_size_of<T: Value>() -> usize {
     <T::Primitive as sealed::Primitive>::SIZE_IN_UTF
 }

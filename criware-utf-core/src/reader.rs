@@ -204,12 +204,10 @@ impl Reader {
             return Err(Error::InvalidColumnStorage(storage_flag));
         }
     }
-    #[inline(always)]
     pub fn read_rowed_column<T: Value>(&mut self, name: &'static str) -> Result<()> {
         self.read_rowed_column_private(name, T::Primitive::TYPE_FLAG, false)?;
         Ok(())
     }
-    #[inline(always)]
     pub fn read_rowed_column_opt<T: Value>(&mut self, name: &'static str) -> Result<bool> {
         self.read_rowed_column_private(name, T::Primitive::TYPE_FLAG, true)
     }
