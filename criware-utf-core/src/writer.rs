@@ -1,10 +1,6 @@
-use std::{any::type_name, collections::HashMap, io::Write};
+use std::{any::type_name, borrow::Cow, collections::HashMap, io::Write};
 
-use crate::{
-    Error, Result, Value,
-    reader::IOErrorHelper,
-    value::sealed::{Primitive, StorageMethod},
-};
+use crate::{Error, Result, Value, reader::IOErrorHelper, value::sealed::Primitive};
 
 /// Extra contextual info for accurating recreating read tables when writing
 ///
@@ -27,17 +23,17 @@ impl WriteContext {
 
 /// Abstraction layer for writing UTF tables
 ///
-pub struct Writer {
+pub struct Writer<'a> {
     column_data: Vec<u8>,
     row_data: Vec<u8>,
-    strings: HashMap<String, u32>,
+    strings: HashMap<Cow<'a, str>, u32>,
     string_data: Vec<u8>,
     blobs: Vec<u8>,
     field_count: u16,
 }
 
-impl Writer {
-    pub fn new(table_name: &'static str) -> Writer {
+impl<'a> Writer<'a> {
+    pub fn new(table_name: &'a str) -> Writer<'a> {
         let mut writer = Writer {
             column_data: Vec::new(),
             row_data: Vec::new(),
@@ -46,8 +42,8 @@ impl Writer {
             blobs: Vec::new(),
             field_count: 0,
         };
-        writer.strings.insert("<NULL>".to_string(), 0);
-        writer.strings.insert(table_name.to_string(), 7);
+        writer.strings.insert(Cow::Borrowed("<NULL>"), 0);
+        writer.strings.insert(Cow::Borrowed(table_name), 7);
         writer.string_data.extend_from_slice(b"<NULL>\0");
         writer.string_data.extend_from_slice(table_name.as_bytes());
         writer.string_data.push(0u8);
@@ -99,109 +95,76 @@ impl Writer {
         writer.write_all(&self.blobs).io("UTF blobs")?;
         Ok(())
     }
-    pub fn push_constant_column<T: Value>(&mut self, name: &'static str, value: &T) -> Result<()> {
-        self.write_raw_value::<u8>(false, &(0x30 | (T::Primitive::TYPE_FLAG as u8)))?;
-        self.write_static_str(false, name);
+    pub fn push_constant_column<T: Value>(&mut self, name: &'a str, value: &'a T) -> Result<()> {
+        self.write_primitive::<u8>(false, Cow::Owned(0x30 | (T::Primitive::TYPE_FLAG as u8)));
+        self.write_primitive(false, Cow::Borrowed(name));
         self.write_raw_value(false, value)?;
         self.field_count += 1;
         Ok(())
     }
     pub fn push_constant_column_opt<T: Value>(
         &mut self,
-        name: &'static str,
-        value: &Option<T>,
+        name: &'a str,
+        value: &'a Option<T>,
     ) -> Result<()> {
         match value {
             Some(value) => self.push_constant_column(name, value),
             None => {
-                self.write_raw_value::<u8>(false, &(0x10 | (T::Primitive::TYPE_FLAG as u8)))?;
-                self.write_static_str(false, name);
+                self.write_primitive::<u8>(
+                    false,
+                    Cow::Owned(0x10 | (T::Primitive::TYPE_FLAG as u8)),
+                );
+                self.write_primitive::<str>(false, Cow::Borrowed(name));
                 self.field_count += 1;
                 Ok(())
             }
         }
     }
-    pub fn push_rowed_column<T: Value>(&mut self, name: &'static str) -> Result<()> {
-        self.write_raw_value::<u8>(false, &(0x50 | (T::Primitive::TYPE_FLAG as u8)))?;
-        self.write_static_str(false, name);
+    pub fn push_rowed_column<T: Value>(&mut self, name: &'a str) -> Result<()> {
+        self.write_primitive::<u8>(false, Cow::Owned(0x50 | (T::Primitive::TYPE_FLAG as u8)));
+        self.write_primitive::<str>(false, Cow::Borrowed(name));
         self.field_count += 1;
         Ok(())
     }
-    pub fn push_rowed_column_opt<T: Value>(
-        &mut self,
-        name: &'static str,
-        included: bool,
-    ) -> Result<()> {
+    pub fn push_rowed_column_opt<T: Value>(&mut self, name: &'a str, included: bool) -> Result<()> {
         if included {
             self.push_rowed_column::<T>(name)
         } else {
-            self.write_raw_value::<u8>(false, &(0x10 | (T::Primitive::TYPE_FLAG as u8)))?;
-            self.write_static_str(false, name);
+            self.write_primitive::<u8>(false, Cow::Owned(0x10 | (T::Primitive::TYPE_FLAG as u8)));
+            self.write_primitive::<str>(false, Cow::Borrowed(name));
             self.field_count += 1;
             Ok(())
         }
     }
-    pub fn write_raw_value<T: Value>(&mut self, rowed: bool, value: &T) -> Result<()> {
+    pub fn write_primitive<T: Primitive + ?Sized>(&mut self, rowed: bool, value: Cow<'a, T>) {
         let destination = if rowed {
             &mut self.row_data
         } else {
             &mut self.column_data
         };
-        let primitive: T::Primitive;
-        let primitive_ref = match T::to_primitive_ref(value) {
-            Ok(prim) => prim,
-            Err(error) => 'prim: {
-                if let Some(error) = error.downcast_ref::<Error>() {
-                    if matches!(error, Error::ConversionNotImplemented) {
-                        match T::to_primitive(value) {
-                            Ok(prim) => {
-                                primitive = prim;
-                                break 'prim &primitive;
-                            }
-                            Err(error) => {
-                                return Err(Error::ValueConversion(
-                                    type_name::<T>(),
-                                    type_name::<T::Primitive>(),
-                                    error,
-                                ));
-                            }
-                        }
-                    }
-                }
+        destination.extend_from_slice(
+            T::write(
+                value,
+                &mut self.strings,
+                &mut self.string_data,
+                &mut self.blobs,
+            )
+            .as_ref(),
+        );
+    }
+    pub fn write_raw_value<T: Value>(&mut self, rowed: bool, value: &'a T) -> Result<()> {
+        match T::to_primitive(value) {
+            Ok(prim) => {
+                self.write_primitive(rowed, prim);
+                Ok(())
+            }
+            Err(error) => {
                 return Err(Error::ValueConversion(
                     type_name::<T>(),
                     type_name::<T::Primitive>(),
                     error,
                 ));
             }
-        };
-        let buffer = match <T::Primitive as Primitive>::STORAGE_TYPE {
-            StorageMethod::Number => primitive_ref.write_number(),
-            StorageMethod::String => {
-                primitive_ref.write_string(&mut self.strings, &mut self.string_data)
-            }
-            StorageMethod::Blob => primitive_ref.write_blob(&mut self.blobs),
-        };
-        destination.extend_from_slice(buffer.as_ref());
-        Ok(())
-    }
-    #[doc(hidden)]
-    fn write_static_str(&mut self, rowed: bool, string: &'static str) {
-        let destination = if rowed {
-            &mut self.row_data
-        } else {
-            &mut self.column_data
-        };
-        let buffer = match self.strings.get(string) {
-            Some(idx) => (*idx).to_be_bytes(),
-            None => {
-                let position = self.string_data.len() as u32;
-                self.string_data.extend_from_slice(string.as_bytes());
-                self.string_data.push(0u8);
-                self.strings.insert(string.to_owned(), position);
-                position.to_be_bytes()
-            }
-        };
-        destination.extend_from_slice(&buffer);
+        }
     }
 }

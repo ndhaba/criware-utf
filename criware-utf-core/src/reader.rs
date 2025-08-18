@@ -3,10 +3,7 @@ use std::{
     io::{Cursor, Read},
 };
 
-use crate::{
-    Error, Result, Value,
-    value::sealed::{Primitive, StorageMethod},
-};
+use crate::{Error, Result, Value, value::sealed::Primitive};
 
 #[inline(always)]
 pub(crate) fn is_valid_value_flag(half: u8) -> bool {
@@ -81,30 +78,23 @@ impl Reader {
         let table_size = {
             let mut header = [0u8; 8];
             reader.read_exact(&mut header).io("@UTF header")?;
-            let (magic, size): ([u8; 4], u32) = unsafe { std::mem::transmute(header) };
-            if &magic != b"@UTF" {
+            if &header[0..4] != b"@UTF" {
                 return Err(Error::MalformedHeader);
             }
-            u32::from_be(size)
+            u32::from_be_bytes(header[4..8].try_into().unwrap())
         };
-        let (row_offset, string_offset, blob_offset, table_name, field_count, row_size, row_count) = {
-            if table_size < 24 {
-                return Err(Error::EOF("@UTF header".to_string()));
-            }
-            let mut header = [0u8; 24];
-            reader.read_exact(&mut header).io("@UTF header")?;
-            let result: (u32, u32, u32, u32, u16, u16, u32) =
-                unsafe { std::mem::transmute(header) };
-            (
-                u32::from_be(result.0),
-                u32::from_be(result.1),
-                u32::from_be(result.2),
-                u32::from_be(result.3),
-                u16::from_be(result.4),
-                u16::from_be(result.5),
-                u32::from_be(result.6),
-            )
-        };
+        if table_size < 24 {
+            return Err(Error::EOF("@UTF header".to_string()));
+        }
+        let mut header = [0u8; 24];
+        reader.read_exact(&mut header).io("@UTF header")?;
+        let row_offset = u32::from_be_bytes(header[0..4].try_into().unwrap());
+        let string_offset = u32::from_be_bytes(header[4..8].try_into().unwrap());
+        let blob_offset = u32::from_be_bytes(header[8..12].try_into().unwrap());
+        let table_name = u32::from_be_bytes(header[12..16].try_into().unwrap());
+        let field_count = u16::from_be_bytes(header[16..18].try_into().unwrap());
+        let row_size = u16::from_be_bytes(header[18..20].try_into().unwrap());
+        let row_count = u32::from_be_bytes(header[20..24].try_into().unwrap());
         if 24 > row_offset
             || row_offset > string_offset
             || string_offset > blob_offset
@@ -234,20 +224,10 @@ impl Reader {
                 _ => return Err(Error::IOError(error)),
             },
         };
-        let primitive: <T as Value>::Primitive = match <T::Primitive as Primitive>::STORAGE_TYPE {
-            StorageMethod::Number => <T::Primitive as Primitive>::parse_number(buffer),
-            StorageMethod::String => {
-                match <T::Primitive as Primitive>::parse_string(buffer, &self.strings) {
-                    Some(string) => string,
-                    None => return Err(Error::StringNotFound),
-                }
-            }
-            StorageMethod::Blob => {
-                match <T::Primitive as Primitive>::parse_blob(buffer, &self.blobs) {
-                    Some(blob) => blob,
-                    None => return Err(Error::BlobNotFound),
-                }
-            }
+        let primitive = match <T::Primitive as Primitive>::parse(buffer, &self.strings, &self.blobs)
+        {
+            Some(prim) => prim,
+            None => return Err(Error::DataNotFound),
         };
         T::from_primitive(primitive).map_err(|error| {
             Error::ValueConversion(

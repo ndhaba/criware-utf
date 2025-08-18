@@ -16,10 +16,12 @@ pub use crate::writer::{WriteContext, Writer};
 ///
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("blob not found")]
-    BlobNotFound,
+    #[error("wrong size")]
+    BlobWrongSize,
     #[error("conversion not implemented")]
     ConversionNotImplemented,
+    #[error("string/blob not found")]
+    DataNotFound,
     #[error("reached end of file early (at {0})")]
     EOF(String),
     #[error("invalid column storage flag: 0x{0:02}")]
@@ -32,8 +34,6 @@ pub enum Error {
     MalformedHeader,
     #[error("error when decoding utf8 string: {0}")]
     StringMalformed(std::str::Utf8Error),
-    #[error("string not found")]
-    StringNotFound,
     #[error("optional column conflict: \"{0}\" (values must be all Some or all None)")]
     OptionalColumnConflict(&'static str),
     #[error("failed to convert {0} to {1}: {2}")]
