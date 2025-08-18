@@ -147,9 +147,27 @@ impl Writer {
         } else {
             &mut self.column_data
         };
-        let primitive = match T::to_utf_value(value) {
+        let primitive: T::Primitive;
+        let primitive_ref = match T::to_primitive_ref(value) {
             Ok(prim) => prim,
-            Err(error) => {
+            Err(error) => 'prim: {
+                if let Some(error) = error.downcast_ref::<Error>() {
+                    if matches!(error, Error::ConversionNotImplemented) {
+                        match T::to_primitive(value) {
+                            Ok(prim) => {
+                                primitive = prim;
+                                break 'prim &primitive;
+                            }
+                            Err(error) => {
+                                return Err(Error::ValueConversion(
+                                    type_name::<T>(),
+                                    type_name::<T::Primitive>(),
+                                    error,
+                                ));
+                            }
+                        }
+                    }
+                }
                 return Err(Error::ValueConversion(
                     type_name::<T>(),
                     type_name::<T::Primitive>(),
@@ -158,11 +176,11 @@ impl Writer {
             }
         };
         let buffer = match <T::Primitive as Primitive>::STORAGE_TYPE {
-            StorageMethod::Number => primitive.write_number(),
+            StorageMethod::Number => primitive_ref.write_number(),
             StorageMethod::String => {
-                primitive.write_string(&mut self.strings, &mut self.string_data)
+                primitive_ref.write_string(&mut self.strings, &mut self.string_data)
             }
-            StorageMethod::Blob => primitive.write_blob(&mut self.blobs),
+            StorageMethod::Blob => primitive_ref.write_blob(&mut self.blobs),
         };
         destination.extend_from_slice(buffer.as_ref());
         Ok(())

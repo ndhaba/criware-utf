@@ -249,7 +249,7 @@ impl Reader {
                 }
             }
         };
-        T::from_utf_value(primitive).map_err(|error| {
+        T::from_primitive(primitive).map_err(|error| {
             Error::ValueConversion(
                 std::any::type_name::<T::Primitive>(),
                 std::any::type_name::<T>(),

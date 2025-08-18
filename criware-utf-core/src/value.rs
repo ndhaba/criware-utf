@@ -27,7 +27,7 @@ pub(crate) mod sealed {
     }
 
     #[doc(hidden)]
-    pub trait Primitive: Sized + Default {
+    pub trait Primitive: Sized + Default + Clone {
         type Buffer: AsRef<[u8]> + AsMut<[u8]> + Default;
 
         const SIZE_IN_UTF: usize = std::mem::size_of::<Self::Buffer>();
@@ -159,25 +159,64 @@ blanket_impl!(Primitive for u8, u16, u32, u64, i8, i16, i32, i64, f32, String, V
 pub trait Value: Sized + Default {
     type Primitive: Primitive;
 
-    fn from_utf_value(value: Self::Primitive) -> Result<Self, Box<dyn std::error::Error>>;
-    fn to_utf_value<'a>(&'a self) -> Result<&'a Self::Primitive, Box<dyn std::error::Error>>;
+    fn from_primitive(value: Self::Primitive) -> Result<Self, Box<dyn std::error::Error>>;
+    fn to_primitive(&self) -> Result<Self::Primitive, Box<dyn std::error::Error>>;
+    fn to_primitive_ref<'a>(&'a self) -> Result<&'a Self::Primitive, Box<dyn std::error::Error>> {
+        Err(crate::Error::ConversionNotImplemented.into())
+    }
 }
 
 impl<T: Primitive> Value for T {
     type Primitive = T;
 
     #[inline(always)]
-    fn from_utf_value(value: Self::Primitive) -> Result<Self, Box<dyn std::error::Error>> {
+    fn from_primitive(value: Self::Primitive) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(value)
     }
     #[inline(always)]
-    fn to_utf_value<'a>(&'a self) -> Result<&'a Self::Primitive, Box<dyn std::error::Error>> {
+    fn to_primitive(&self) -> Result<Self::Primitive, Box<dyn std::error::Error>> {
+        Ok(self.clone())
+    }
+    #[inline(always)]
+    fn to_primitive_ref<'a>(&'a self) -> Result<&'a Self::Primitive, Box<dyn std::error::Error>> {
         Ok(&self)
     }
 }
 
-/// Returns the space (in bytes) a value would take up in column/row space
-///
+/**
+Returns the space (in bytes) a value would take up in column/row space
+
+When a constant or rowed value is written, it is stored in the column or row
+space (respectively). The space taken up in said space does not depend on the
+data itself and can be determined at compile-time.
+
+# Example
+```
+# extern crate criware_utf_core as criware_utf;
+# use criware_utf::{Value, utf_size_of};
+#[derive(Default)]
+struct SplitU8(u8, u8);
+
+impl Value for SplitU8 {
+    type Primitive = u8;
+    // ...
+#   fn from_primitive(value: Self::Primitive) -> Result<Self, Box<dyn std::error::Error>> {
+#       Ok(SplitU8(value >> 4, value & 15))
+#   }
+#   fn to_primitive(&self) -> Result<Self::Primitive, Box<dyn std::error::Error>> {
+#       Ok((self.0 << 4) | self.1)
+#   }
+}
+
+fn main() {
+    assert_eq!(utf_size_of::<u8>(), 1);
+    assert_eq!(utf_size_of::<i32>(), 4);
+    assert_eq!(utf_size_of::<Vec<u8>>(), 8);
+    assert_eq!(utf_size_of::<String>(), 4);
+    assert_eq!(utf_size_of::<SplitU8>(), utf_size_of::<u8>());
+}
+```
+*/
 #[inline(always)]
 pub const fn utf_size_of<T: Value>() -> usize {
     <T::Primitive as sealed::Primitive>::SIZE_IN_UTF

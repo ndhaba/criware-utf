@@ -18,6 +18,8 @@ pub use crate::writer::{WriteContext, Writer};
 pub enum Error {
     #[error("blob not found")]
     BlobNotFound,
+    #[error("conversion not implemented")]
+    ConversionNotImplemented,
     #[error("reached end of file early (at {0})")]
     EOF(String),
     #[error("invalid column storage flag: 0x{0:02}")]
