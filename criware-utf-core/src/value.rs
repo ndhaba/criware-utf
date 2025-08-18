@@ -155,15 +155,39 @@ pub trait Primitive: sealed::Primitive + ToOwned {}
 
 blanket_impl!(Primitive for u8, u16, u32, u64, i8, i16, i32, i64, f32, str, [u8]);
 
-/// A value that can be stored in a table, but must be converted first
-///
-/// This trait allows for any arbitrary type to be encodable and decodable
-/// from a UTF table, as long as it can be converted into one of the core
-/// storeable types (implementors of trait [`Primitive`]).
-///
+/**
+A value that can be stored in a table, but must be converted first
+
+This trait allows for any arbitrary type to be encodable and decodable
+from a UTF table, as long as it can be converted into one of the core
+storeable types (implementors of trait [`Primitive`]).
+
+# Example
+```
+# use std::{borrow::Cow, error::Error};
+# use criware_utf_core::Value;
+
+#[derive(Default)]
+struct Buffer(String);
+
+impl Value for Buffer {
+    type Primitive = str;
+    fn from_primitive(value: String) -> Result<Self, Box<dyn Error>> {
+        Ok(Buffer(value))
+    }
+    fn to_primitive<'a>(&'a self) -> Result<Cow<'a, str>, Box<dyn Error>> {
+        Ok(Cow::Borrowed(&self.0))
+    }
+}
+```
+*/
 pub trait Value: Sized {
-    /// The primitive to which this value will be converted to/from
-    ///
+    /**
+    The primitive to which this value will be converted to/from
+
+    This may be [`u8`], [`i8`], [`u16`], [`i16`], [`u32`], [`i32`], [`u64`],
+    [`i64`], [`f32`], [`str`], or `[u8]`
+    */
     type Primitive: Primitive + ?Sized;
 
     /// Attempts to convert from the chosen primitive to this type.
