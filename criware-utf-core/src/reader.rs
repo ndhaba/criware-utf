@@ -3,7 +3,7 @@ use std::{
     io::{Cursor, Read},
 };
 
-use crate::{Error, Result, Value, value::sealed::Primitive};
+use crate::{Error, Result, Value, ValueKind, value::sealed::Primitive};
 
 #[inline(always)]
 pub(crate) fn is_valid_value_flag(half: u8) -> bool {
@@ -15,13 +15,10 @@ pub(crate) fn is_valid_storage_flag(half: u8) -> bool {
 }
 
 macro_rules! handle_type_flag {
-    ($type_flag:ident) => {
-        if $type_flag != <T::Primitive as Primitive>::TYPE_FLAG as u8 {
+    ($type_flag:path => $expected:path) => {
+        if $type_flag != $expected as u8 {
             if is_valid_value_flag($type_flag) {
-                return Err(Error::WrongColumnType(
-                    $type_flag,
-                    <T::Primitive as Primitive>::TYPE_FLAG as u8,
-                ));
+                return Err(Error::WrongColumnType($type_flag, $expected as u8));
             } else {
                 return Err(Error::InvalidColumnType($type_flag));
             }
@@ -161,7 +158,7 @@ impl Reader {
     pub fn more_row_data(&self) -> bool {
         (self.row_buffer.position() as usize) < self.row_buffer_size
     }
-    pub fn read_column_constant<T: Value>(&mut self, name: &'static str) -> Result<T> {
+    pub fn read_constant_column<T: Value>(&mut self, name: &'static str) -> Result<T> {
         let flag: u8 = self.read_raw_value(false)?;
         let column_name: String = self.read_raw_value(false)?;
         if column_name != name {
@@ -169,10 +166,10 @@ impl Reader {
         }
         let type_flag = flag & 0x0f;
         let storage_flag = flag & 0xf0;
-        handle_type_flag!(type_flag);
+        handle_type_flag!(type_flag => T::Primitive::TYPE_FLAG);
         handle_storage_flag!(storage_flag == "0x30": 0x30 => self.read_raw_value(false))
     }
-    pub fn read_column_constant_opt<T: Value>(&mut self, name: &'static str) -> Result<Option<T>> {
+    pub fn read_constant_column_opt<T: Value>(&mut self, name: &'static str) -> Result<Option<T>> {
         let flag: u8 = self.read_raw_value(false)?;
         let column_name: String = self.read_raw_value(false)?;
         if column_name != name {
@@ -180,10 +177,15 @@ impl Reader {
         }
         let type_flag = flag & 0x0f;
         let storage_flag = flag & 0xf0;
-        handle_type_flag!(type_flag);
+        handle_type_flag!(type_flag => T::Primitive::TYPE_FLAG);
         handle_storage_flag!(storage_flag == "0x30": 0x10 => Ok(None), 0x30 => Ok(Some(self.read_raw_value(false)?)))
     }
-    pub fn read_column_rowed<T: Value>(&mut self, name: &'static str) -> Result<()> {
+    fn read_rowed_column_private(
+        &mut self,
+        name: &'static str,
+        kind: ValueKind,
+        optional: bool,
+    ) -> Result<bool> {
         let flag: u8 = self.read_raw_value(false)?;
         let column_name: String = self.read_raw_value(false)?;
         if column_name != name {
@@ -191,19 +193,25 @@ impl Reader {
         }
         let type_flag = flag & 0x0f;
         let storage_flag = flag & 0xf0;
-        handle_type_flag!(type_flag);
-        handle_storage_flag!(storage_flag == "0x50": 0x50 => Ok(()))
+        handle_type_flag!(type_flag => kind);
+        if storage_flag == 0x50 {
+            Ok(true)
+        } else if optional && storage_flag == 0x10 {
+            Ok(false)
+        } else if is_valid_storage_flag(storage_flag) {
+            return Err(Error::WrongColumnStorage(storage_flag, "0x50"));
+        } else {
+            return Err(Error::InvalidColumnStorage(storage_flag));
+        }
     }
-    pub fn read_column_rowed_opt<T: Value>(&mut self, name: &'static str) -> Result<bool> {
-        let flag: u8 = self.read_raw_value(false)?;
-        let column_name: String = self.read_raw_value(false)?;
-        if column_name != name {
-            return Err(Error::WrongColumnName(column_name, name));
-        }
-        let type_flag = flag & 0x0f;
-        let storage_flag = flag & 0xf0;
-        handle_type_flag!(type_flag);
-        handle_storage_flag!(storage_flag == "0x50": 0x10 => Ok(false), 0x50 => Ok(true))
+    #[inline(always)]
+    pub fn read_rowed_column<T: Value>(&mut self, name: &'static str) -> Result<()> {
+        self.read_rowed_column_private(name, T::Primitive::TYPE_FLAG, false)?;
+        Ok(())
+    }
+    #[inline(always)]
+    pub fn read_rowed_column_opt<T: Value>(&mut self, name: &'static str) -> Result<bool> {
+        self.read_rowed_column_private(name, T::Primitive::TYPE_FLAG, true)
     }
     pub fn read_raw_value<T: Value>(&mut self, row: bool) -> Result<T> {
         let mut buffer: <T::Primitive as Primitive>::Buffer = Default::default();

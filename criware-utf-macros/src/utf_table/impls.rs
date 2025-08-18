@@ -19,11 +19,11 @@ mod read {
                 let var_ident = &column.variable_ident;
                 if column.optional.is_some() {
                     quote! {
-                        let #var_ident = reader.read_column_constant_opt(#column_name)?;
+                        let #var_ident = reader.read_constant_column_opt(#column_name)?;
                     }
                 } else {
                     quote! {
-                        let #var_ident = reader.read_column_constant(#column_name)?;
+                        let #var_ident = reader.read_constant_column(#column_name)?;
                     }
                 }
             }
@@ -33,11 +33,11 @@ mod read {
                 if column.optional.is_some() {
                     let cond_ident = &column.condition_ident;
                     quote! {
-                        let #cond_ident = reader.read_column_rowed_opt::<#ty>(#column_name)?;
+                        let #cond_ident = reader.read_rowed_column_opt::<#ty>(#column_name)?;
                     }
                 } else {
                     quote! {
-                        reader.read_column_rowed::<#ty>(#column_name)?;
+                        reader.read_rowed_column::<#ty>(#column_name)?;
                     }
                 }
             }
