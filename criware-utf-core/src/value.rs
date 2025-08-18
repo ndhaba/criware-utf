@@ -154,13 +154,35 @@ pub trait Primitive: sealed::Primitive {}
 
 blanket_impl!(Primitive for u8, u16, u32, u64, i8, i16, i32, i64, f32, String, Vec<u8>);
 
-/// A value that can be stored, but must be converted first
+/// A value that can be stored in a table, but must be converted first
+///
+/// This trait allows for any arbitrary type to be encodable and decodable
+/// from a UTF table, as long as it can be converted into one of the core
+/// storeable types (implementors of trait [`Primitive`]).
 ///
 pub trait Value: Sized + Default {
+    /// The primitive to which this value will be converted to/from
+    ///
     type Primitive: Primitive;
 
+    /// Attempts to convert from the chosen primitive to this type.
+    ///
     fn from_primitive(value: Self::Primitive) -> Result<Self, Box<dyn std::error::Error>>;
+
+    /// Attempts to convert this value to the chosen primitive type.
+    ///
     fn to_primitive(&self) -> Result<Self::Primitive, Box<dyn std::error::Error>>;
+
+    /*
+    Attempts to convert a reference of this value to a reference of the
+    chosen primitive.
+
+    The default implementation simply fails with an
+    [`Error::ConversionNotImplemented`]. If the implementation of
+    `to_primitive` requires expensive allocation/clones, this function may
+    be implemented as well. All writes will attempt to use this function
+    and fallback on [`to_primitive`] if this isn't implemented.
+    */
     fn to_primitive_ref<'a>(&'a self) -> Result<&'a Self::Primitive, Box<dyn std::error::Error>> {
         Err(crate::Error::ConversionNotImplemented.into())
     }
