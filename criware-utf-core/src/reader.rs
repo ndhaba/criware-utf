@@ -25,20 +25,6 @@ macro_rules! handle_type_flag {
         }
     };
 }
-macro_rules! handle_storage_flag {
-    ($flag:ident == $err:literal: $($name:literal => $ret:expr), *) => {
-        $(
-            if $flag == $name {
-                $ret
-            }
-        ) else *
-        else if is_valid_storage_flag($flag) {
-            return Err(Error::WrongColumnStorage($flag, $err));
-        } else {
-            return Err(Error::InvalidColumnStorage($flag));
-        }
-    };
-}
 
 pub(crate) trait IOErrorHelper<T> {
     fn io(self, message: &str) -> Result<T>;
@@ -158,27 +144,34 @@ impl Reader {
     pub fn more_row_data(&self) -> bool {
         (self.row_buffer.position() as usize) < self.row_buffer_size
     }
-    pub fn read_constant_column<T: Value>(&mut self, name: &'static str) -> Result<T> {
-        let flag: u8 = self.read_raw_value(false)?;
-        let column_name: String = self.read_raw_value(false)?;
+    fn read_constant_column_private<T: Value>(
+        &mut self,
+        name: &'static str,
+        optional: bool,
+    ) -> Result<Option<T>> {
+        let flag = self.read_primitive::<u8>(false)?;
+        let column_name = self.read_primitive::<str>(false)?;
         if column_name != name {
             return Err(Error::WrongColumnName(column_name, name));
         }
         let type_flag = flag & 0x0f;
         let storage_flag = flag & 0xf0;
         handle_type_flag!(type_flag => T::Primitive::TYPE_FLAG);
-        handle_storage_flag!(storage_flag == "0x30": 0x30 => self.read_raw_value(false))
+        if storage_flag == 0x30 {
+            Ok(Some(self.read_value(false)?))
+        } else if optional && storage_flag == 0x10 {
+            Ok(None)
+        } else if is_valid_storage_flag(storage_flag) {
+            return Err(Error::WrongColumnStorage(storage_flag, "0x30"));
+        } else {
+            return Err(Error::InvalidColumnStorage(storage_flag));
+        }
+    }
+    pub fn read_constant_column<T: Value>(&mut self, name: &'static str) -> Result<T> {
+        Ok(self.read_constant_column_private(name, false)?.unwrap())
     }
     pub fn read_constant_column_opt<T: Value>(&mut self, name: &'static str) -> Result<Option<T>> {
-        let flag: u8 = self.read_raw_value(false)?;
-        let column_name: String = self.read_raw_value(false)?;
-        if column_name != name {
-            return Err(Error::WrongColumnName(column_name, name));
-        }
-        let type_flag = flag & 0x0f;
-        let storage_flag = flag & 0xf0;
-        handle_type_flag!(type_flag => T::Primitive::TYPE_FLAG);
-        handle_storage_flag!(storage_flag == "0x30": 0x10 => Ok(None), 0x30 => Ok(Some(self.read_raw_value(false)?)))
+        self.read_constant_column_private(name, true)
     }
     fn read_rowed_column_private(
         &mut self,
@@ -186,8 +179,8 @@ impl Reader {
         kind: ValueKind,
         optional: bool,
     ) -> Result<bool> {
-        let flag: u8 = self.read_raw_value(false)?;
-        let column_name: String = self.read_raw_value(false)?;
+        let flag = self.read_primitive::<u8>(false)?;
+        let column_name = self.read_primitive::<str>(false)?;
         if column_name != name {
             return Err(Error::WrongColumnName(column_name, name));
         }
@@ -211,8 +204,8 @@ impl Reader {
     pub fn read_rowed_column_opt<T: Value>(&mut self, name: &'static str) -> Result<bool> {
         self.read_rowed_column_private(name, T::Primitive::TYPE_FLAG, true)
     }
-    pub fn read_raw_value<T: Value>(&mut self, row: bool) -> Result<T> {
-        let mut buffer: <T::Primitive as Primitive>::Buffer = Default::default();
+    fn read_primitive<T: Primitive + ?Sized>(&mut self, row: bool) -> Result<T::Owned> {
+        let mut buffer: T::Buffer = Default::default();
         let reader = if row {
             &mut self.row_buffer
         } else {
@@ -224,18 +217,19 @@ impl Reader {
                 std::io::ErrorKind::UnexpectedEof => {
                     return Err(Error::EOF(format!(
                         "reading {} value",
-                        std::any::type_name::<T::Primitive>()
+                        std::any::type_name::<T>()
                     )));
                 }
                 _ => return Err(Error::IOError(error)),
             },
         };
-        let primitive = match <T::Primitive as Primitive>::parse(buffer, &self.strings, &self.blobs)
-        {
-            Some(prim) => prim,
-            None => return Err(Error::DataNotFound),
-        };
-        T::from_primitive(primitive).map_err(|error| {
+        match <T as Primitive>::parse(buffer, &self.strings, &self.blobs) {
+            Some(prim) => Ok(prim),
+            None => Err(Error::DataNotFound),
+        }
+    }
+    pub fn read_value<T: Value>(&mut self, row: bool) -> Result<T> {
+        T::from_primitive(self.read_primitive::<T::Primitive>(row)?).map_err(|error| {
             Error::ValueConversion(
                 std::any::type_name::<T::Primitive>(),
                 std::any::type_name::<T>(),

@@ -78,14 +78,14 @@ mod read {
             let cond_ident = &column.condition_ident;
             quote! {
                 let #var_ident = if #cond_ident {
-                    Some(reader.read_raw_value(true)?)
+                    Some(reader.read_value(true)?)
                 } else {
                     None
                 };
             }
         } else {
             quote! {
-                let #var_ident = reader.read_raw_value(true)?;
+                let #var_ident = reader.read_value(true)?;
             }
         }
     }

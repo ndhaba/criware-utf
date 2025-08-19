@@ -1,6 +1,6 @@
 use std::{any::type_name, borrow::Cow, collections::HashMap, io::Write};
 
-use crate::{Error, Result, Value, reader::IOErrorHelper, value::sealed::Primitive};
+use crate::{Error, Result, Value, ValueKind, reader::IOErrorHelper, value::sealed::Primitive};
 
 /// Extra contextual info for accurating recreating read tables when writing
 ///
@@ -95,48 +95,49 @@ impl<'a> Writer<'a> {
         writer.write_all(&self.blobs).io("UTF blobs")?;
         Ok(())
     }
-    pub fn push_constant_column<T: Value>(&mut self, name: &'a str, value: &'a T) -> Result<()> {
-        self.write_primitive::<u8>(false, Cow::Owned(0x30 | (T::Primitive::TYPE_FLAG as u8)));
+    pub fn push_constant_column_private<T: Value>(
+        &mut self,
+        name: &'a str,
+        value: Option<&'a T>,
+    ) -> Result<()> {
+        let flag = if value.is_some() { 0x30 } else { 0x10 };
+        self.write_primitive::<u8>(false, Cow::Owned(flag | (T::Primitive::TYPE_FLAG as u8)));
         self.write_primitive(false, Cow::Borrowed(name));
-        self.write_raw_value(false, value)?;
+        if let Some(value) = value {
+            self.write_raw_value(false, value)?;
+        }
         self.field_count += 1;
         Ok(())
+    }
+    pub fn push_constant_column<T: Value>(&mut self, name: &'a str, value: &'a T) -> Result<()> {
+        self.push_constant_column_private(name, Some(value))
     }
     pub fn push_constant_column_opt<T: Value>(
         &mut self,
         name: &'a str,
         value: &'a Option<T>,
     ) -> Result<()> {
-        match value {
-            Some(value) => self.push_constant_column(name, value),
-            None => {
-                self.write_primitive::<u8>(
-                    false,
-                    Cow::Owned(0x10 | (T::Primitive::TYPE_FLAG as u8)),
-                );
-                self.write_primitive::<str>(false, Cow::Borrowed(name));
-                self.field_count += 1;
-                Ok(())
-            }
-        }
+        self.push_constant_column_private::<T>(name, value.into())
     }
-    pub fn push_rowed_column<T: Value>(&mut self, name: &'a str) -> Result<()> {
-        self.write_primitive::<u8>(false, Cow::Owned(0x50 | (T::Primitive::TYPE_FLAG as u8)));
+    fn push_rowed_column_private(
+        &mut self,
+        name: &'a str,
+        included: bool,
+        kind: ValueKind,
+    ) -> Result<()> {
+        let storage_flag = if included { 0x50 } else { 0x10 };
+        self.write_primitive::<u8>(false, Cow::Owned(storage_flag | (kind as u8)));
         self.write_primitive::<str>(false, Cow::Borrowed(name));
         self.field_count += 1;
         Ok(())
     }
-    pub fn push_rowed_column_opt<T: Value>(&mut self, name: &'a str, included: bool) -> Result<()> {
-        if included {
-            self.push_rowed_column::<T>(name)
-        } else {
-            self.write_primitive::<u8>(false, Cow::Owned(0x10 | (T::Primitive::TYPE_FLAG as u8)));
-            self.write_primitive::<str>(false, Cow::Borrowed(name));
-            self.field_count += 1;
-            Ok(())
-        }
+    pub fn push_rowed_column<T: Value>(&mut self, name: &'a str) -> Result<()> {
+        self.push_rowed_column_private(name, true, T::Primitive::TYPE_FLAG)
     }
-    pub fn write_primitive<T: Primitive + ?Sized>(&mut self, rowed: bool, value: Cow<'a, T>) {
+    pub fn push_rowed_column_opt<T: Value>(&mut self, name: &'a str, included: bool) -> Result<()> {
+        self.push_rowed_column_private(name, included, T::Primitive::TYPE_FLAG)
+    }
+    fn write_primitive<T: Primitive + ?Sized>(&mut self, rowed: bool, value: Cow<'a, T>) {
         let destination = if rowed {
             &mut self.row_data
         } else {
