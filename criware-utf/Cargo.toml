@@ -6,8 +6,8 @@ license.workspace = true
 edition = "2024"
 
 [dependencies]
-criware-utf-core = { version = "0.2.0", path = "../criware-utf-core" }
-criware-utf-macros = { version = "0.2.0", path = "../criware-utf-macros" }
+criware-utf-core = { version = "1.0.0", path = "../criware-utf-core" }
+criware-utf-macros = { version = "1.0.0", path = "../criware-utf-macros" }
 
 [lints]
 workspace = true
