@@ -1,3 +1,8 @@
+//! The procedural macros offered by `criware-utf`.
+//!
+//! Please do not use this on its own. Use the full `criware-utf` crate.
+//!
+
 extern crate proc_macro;
 use proc_macro::TokenStream;
 
@@ -240,14 +245,14 @@ If the table was read, it will simply copy the storage method it was originally
 read as.
 
 If the table is created from scratch, the storage method will default to
-constant/rowed. This behavior can be overwritten with configuration options on
+zero. This behavior can be overwritten with configuration options on
 the `#[optional]` attribute.
 
-### `#[optional(exclude)]`
-
-This will make the column zero instead of constant/rowed
-
 ### `#[optional(include)]`
+
+This will make the column constant/rowed instead of zero
+
+### `#[optional(exclude)]`
 
 This does nothing, but can make the write procedure's behavior more clear to
 readers.

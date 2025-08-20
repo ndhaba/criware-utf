@@ -3,6 +3,7 @@ name = "criware-utf"
 description.workspace = true
 version.workspace = true
 license.workspace = true
+readme.workspace = true
 edition = "2024"
 repository = "https://github.com/ndhaba/criware-utf"
 

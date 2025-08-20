@@ -4,6 +4,7 @@ description = "Core components for parsing/writing UTF tables in CRIWARE CPK fil
 version.workspace = true
 license.workspace = true
 edition = "2024"
+readme = "README.md"
 documentation = "https://docs.rs/criware-utf"
 repository = "https://github.com/ndhaba/criware-utf"
 
