@@ -6,6 +6,7 @@ members = ["criware-utf", "criware-utf-core", "criware-utf-macros"]
 description = "Implementation of the UTF table format used in CRIWARE CPK files"
 version = "1.0.0"
 license = "GPL-3.0-or-later"
+license-file = "LICENSE"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
