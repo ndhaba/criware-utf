@@ -4,8 +4,11 @@ use crate::{Error, Reader, Result, ValueKind};
 ///
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColumnStorageFormat {
+    /// No data is stored currently, but may have data in the future
     Zero,
+    /// A single value is stored
     Constant,
+    /// A value is stored for every row of the table
     Rowed,
 }
 
@@ -13,16 +16,23 @@ pub enum ColumnStorageFormat {
 ///
 #[derive(Debug, Clone)]
 pub struct SchemaColumn {
+    /// The name of the column
     pub name: String,
+    /// The method in which this column stores data
     pub storage_format: ColumnStorageFormat,
+    /// The kind of data this column stores
     pub value_kind: ValueKind,
 }
 
 /// Representation of a table's schema
 ///
-#[derive(Debug)]
+/// This is meant to be immutable.
+///
+#[derive(Debug, Clone)]
 pub struct Schema {
+    /// The name of the table
     pub table_name: String,
+    /// The columns, listed in the order they appear
     pub columns: Box<[SchemaColumn]>,
 }
 
@@ -82,6 +92,23 @@ impl Reader {
 }
 
 impl Schema {
+    /**
+    Returns [`true`] if the column exists, [`false`] otherwise
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Schema;
+    # let mut file = File::open("random-table.bin")?;
+    # let schema = Schema::read(&mut file)?;
+
+    if schema.has_column("ImportantColumn") {
+        println!("important data found :)");
+    } else {
+        println!("could not find important data");
+    }
+    ```
+     */
     pub fn has_column(&self, name: &str) -> bool {
         for column in &self.columns {
             if column.name == name {
@@ -90,7 +117,20 @@ impl Schema {
         }
         false
     }
+    /**
+    Reads a table and extracts its schema.
 
+    The entire table's contents are consumed.
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Schema;
+    let mut file = File::open("random-table.bin")?;
+    let schema = Schema::read(&mut file)?;
+    println!("{}", schema.table_name);
+    ```
+     */
     pub fn read(reader: &mut dyn std::io::Read) -> Result<Self> {
         let mut reader = Reader::new(reader)?;
         let mut columns = Vec::new();

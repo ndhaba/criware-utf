@@ -57,6 +57,19 @@ pub struct Reader {
 }
 
 impl Reader {
+    /**
+    Creates a new `Reader`
+
+    Preliminary validity checks are performed as well.
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Reader;
+    let mut file = File::open("random-table.bin")?;
+    let reader = Reader::new(&mut file)?;
+    ```
+     */
     pub fn new(reader: &mut dyn Read) -> Result<Reader> {
         let table_size = {
             let mut header = [0u8; 8];
@@ -132,18 +145,79 @@ impl Reader {
             field_count,
         })
     }
+
+    /**
+    Returns the number of columns in the table being read
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Reader;
+    let mut file = File::open("random-table.bin")?;
+    let reader = Reader::new(&mut file)?;
+    assert_eq!(reader.field_count(), 7u16);
+    ```
+     */
     pub fn field_count(&self) -> u16 {
         self.field_count
     }
+
+    /**
+    Returns the name of the table being read
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Reader;
+    let mut file = File::open("random-table.bin")?;
+    let reader = Reader::new(&mut file)?;
+    assert_eq!(reader.table_name(), "ImportantTable");
+    ```
+     */
     pub fn table_name<'a>(&'a self) -> &'a str {
         self.strings.get(&self.table_name_index).unwrap().as_str()
     }
+
+    /**
+    Returns [`true`] if there is more data in the column data section, or
+    [`false`] otherwise.
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Reader;
+    let mut file = std::fs::File::open("random-table.bin")?;
+    let reader = criware_utf_core::Reader::new(&mut file)?;
+    // ... column reading code ...
+    if reader.more_column_data() {
+        panic!();
+    }
+    ```
+     */
     pub fn more_column_data(&self) -> bool {
         (self.column_buffer.position() as usize) < self.column_buffer_size
     }
+
+    /**
+    Returns [`true`] if there is more data in the row data section, or
+    [`false`] otherwise.
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Reader;
+    let mut file = std::fs::File::open("random-table.bin")?;
+    let reader = criware_utf_core::Reader::new(&mut file)?;
+    // ... column reading code ...
+    while reader.more_row_data() {
+        // ... row reading code ...
+    }
+    ```
+     */
     pub fn more_row_data(&self) -> bool {
         (self.row_buffer.position() as usize) < self.row_buffer_size
     }
+
     fn read_constant_column_private<T: Value>(
         &mut self,
         name: &'static str,
@@ -167,12 +241,49 @@ impl Reader {
             return Err(Error::InvalidColumnStorage(storage_flag));
         }
     }
+
+    /**
+    Attempts to read a constant column with the given name and type.
+
+    If the column matches, the column's value is returned. If the next column
+    stored does not match, an error is returned.
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Reader;
+    # let mut file = std::fs::File::open("random-table.bin")?;
+    # let reader = criware_utf_core::Reader::new(&mut file)?;
+    let file_count: u64 = reader.read_constant_column("FileCount")?;
+    let version: String = reader.read_constant_column("Version")?;
+    ```
+     */
     pub fn read_constant_column<T: Value>(&mut self, name: &'static str) -> Result<T> {
         Ok(self.read_constant_column_private(name, false)?.unwrap())
     }
+
+    /**
+    Attempts to read an optional constant column with the given name and type.
+
+    If the name and type of value of the next column stored does not match, this
+    function will return an error. The storage method of the column may be
+    constant or zero. If it's constant, the column's value is returned.
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Reader;
+    # let mut file = std::fs::File::open("random-table.bin")?;
+    # let reader = criware_utf_core::Reader::new(&mut file)?;
+    let file_count: u64 = reader.read_constant_column("FileCount")?;
+    let version: String = reader.read_constant_column("Version")?;
+    let crc32: Option<u32> = reader.read_constant_column_opt::<u32>("Crc")?;
+    ```
+     */
     pub fn read_constant_column_opt<T: Value>(&mut self, name: &'static str) -> Result<Option<T>> {
         self.read_constant_column_private(name, true)
     }
+
     fn read_rowed_column_private(
         &mut self,
         name: &'static str,
@@ -197,13 +308,53 @@ impl Reader {
             return Err(Error::InvalidColumnStorage(storage_flag));
         }
     }
+
+    /**
+    Attempts to read a rowed column with the given name and type.
+
+    If the next column stored does not match, an error is returned.
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Reader;
+    # let mut file = std::fs::File::open("random-table.bin")?;
+    # let reader = criware_utf_core::Reader::new(&mut file)?;
+    reader.read_constant_column::<i32>("ID")?;
+    reader.read_constant_column::<String>("Name")?;
+    ```
+     */
     pub fn read_rowed_column<T: Value>(&mut self, name: &'static str) -> Result<()> {
         self.read_rowed_column_private(name, T::Primitive::TYPE_FLAG, false)?;
         Ok(())
     }
+
+    /**
+    Attempts to read an optional rowed column with the given name and type.
+
+    If the name and type of value of the next column stored does not match, this
+    function will return an error. The storage method of the column may be
+    rowed or zero. [`true`] denotes that the column is rowed, [`false`] denotes
+    the column is zero.
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Reader;
+    # let mut file = std::fs::File::open("random-table.bin")?;
+    # let reader = criware_utf_core::Reader::new(&mut file)?;
+    let crc_included: bool = reader.read_rowed_column_opt::<u32>("Crc")?;
+    if crc_included {
+        println!("CRC32 checksums are included with each file!");
+    } else {
+        println!("No checksums found");
+    }
+    ```
+     */
     pub fn read_rowed_column_opt<T: Value>(&mut self, name: &'static str) -> Result<bool> {
         self.read_rowed_column_private(name, T::Primitive::TYPE_FLAG, true)
     }
+
     fn read_primitive<T: Primitive + ?Sized>(&mut self, row: bool) -> Result<T::Owned> {
         let mut buffer: T::Buffer = Default::default();
         let reader = if row {
@@ -228,6 +379,23 @@ impl Reader {
             None => Err(Error::DataNotFound),
         }
     }
+
+    /**
+    Attempts to read a value from the column or row buffer.
+
+    # Example
+    ```no_run
+    # use std::fs::File;
+    # use criware_utf_core::Reader;
+    # let mut file = std::fs::File::open("random-table.bin")?;
+    # let reader = criware_utf_core::Reader::new(&mut file)?;
+    while reader.more_row_data() {
+        let name: String = reader.read_value(true)?;
+        let crc32: u32 = reader.read_value(true)?;
+        // ...
+    }
+    ```
+     */
     pub fn read_value<T: Value>(&mut self, row: bool) -> Result<T> {
         T::from_primitive(self.read_primitive::<T::Primitive>(row)?).map_err(|error| {
             Error::ValueConversion(

@@ -299,11 +299,11 @@ mod write {
                     } else {
                         self.rows[0].#field_ident.is_some()
                     };
-                    table_writer.push_rowed_column_opt::<#ty>(#column_name, #cond_ident)?;
+                    table_writer.push_rowed_column_opt::<#ty>(#column_name, #cond_ident);
                 }
             } else {
                 quote! {
-                    table_writer.push_rowed_column::<#ty>(#column_name)?;
+                    table_writer.push_rowed_column::<#ty>(#column_name);
                 }
             }
         }
@@ -318,12 +318,12 @@ mod write {
                 if #cond_ident != row.#field_ident.is_some() {
                     return ::std::result::Result::Err(::criware_utf::Error::OptionalColumnConflict(#name));
                 } else if #cond_ident {
-                    table_writer.write_raw_value(true, row.#field_ident.as_ref().unwrap())?;
+                    table_writer.write_value(true, row.#field_ident.as_ref().unwrap())?;
                 }
             }
         } else {
             quote! {
-                table_writer.write_raw_value(true, &row.#field_ident)?;
+                table_writer.write_value(true, &row.#field_ident)?;
             }
         }
     }
