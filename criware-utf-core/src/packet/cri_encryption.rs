@@ -59,11 +59,13 @@ fn decrypt_avx2(src: &[u8], dst: &mut [u8]) {
         #[cfg(target_arch = "x86_64")]
         use std::arch::x86_64::{__m256i, _mm256_xor_si256};
         let mask: (__m256i, __m256i) = transmute(DECRYPTION_MASK);
-        let src: &[__m256i] = transmute(&src[0..end]);
-        let dst: &mut [__m256i] = transmute(&mut (dst[0..end]));
+        let src: &[__m256i] = transmute(src);
+        let dst: &mut [__m256i] = transmute(&mut *dst);
         while i < count - 1 {
-            dst[i] = _mm256_xor_si256(src[i], mask.0);
-            dst[i + 1] = _mm256_xor_si256(src[i + 1], mask.1);
+            dst[i..i + 2].copy_from_slice(&[
+                _mm256_xor_si256(*src.get_unchecked(i), mask.0),
+                _mm256_xor_si256(*src.get_unchecked(i + 1), mask.1),
+            ]);
             i += 2;
         }
         if i < count {
