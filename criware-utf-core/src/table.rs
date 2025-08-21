@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{Result, packet::Packet};
 
 /// A UTF table that can be read, written, and constructed from nothing
 ///
@@ -76,4 +76,34 @@ pub trait Table: Sized {
     ```
      */
     fn write(&self, writer: &mut dyn std::io::Write) -> Result<()>;
+
+    /**
+    Reads a UTF table packet from the given stream, verifying that it has
+    the given 4-byte prefix.
+
+    # Example
+    ```
+    # use std::fs::File;
+    # use criware_utf::{Packet, Table, utf_table};
+    #[utf_table]
+    struct Tab {
+        #[constant]
+        constant: i32,
+        row_value: i64,
+    }
+
+    fn main() -> Result<(), Box<dyn std::error::Error>> {
+        let mut file = File::open("table.bin")?;
+        let table: Packet<Tab> = Tab::read_packet(&mut file, b"TAB ")?;
+        // ... do something ...
+        Ok(())
+    }
+    ```
+     */
+    fn read_packet(
+        reader: &mut dyn std::io::Read,
+        prefix: &'static [u8; 4],
+    ) -> Result<Packet<Self>> {
+        Packet::<Self>::read_packet(reader, prefix)
+    }
 }

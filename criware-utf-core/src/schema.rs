@@ -101,7 +101,6 @@ impl Schema {
     # use criware_utf_core::Schema;
     # let mut file = File::open("random-table.bin")?;
     # let schema = Schema::read(&mut file)?;
-
     if schema.has_column("ImportantColumn") {
         println!("important data found :)");
     } else {

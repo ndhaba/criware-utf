@@ -9,7 +9,5 @@ documentation = "https://docs.rs/criware-utf"
 repository = "https://github.com/ndhaba/criware-utf"
 
 [dependencies]
+inventory = "0.3.20"
 thiserror = "2.0.14"
-
-[lints]
-workspace = true

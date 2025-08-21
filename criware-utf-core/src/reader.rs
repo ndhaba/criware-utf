@@ -3,7 +3,7 @@ use std::{
     io::{Cursor, Read},
 };
 
-use crate::{Error, Result, Value, ValueKind, value::sealed::Primitive};
+use crate::{Error, IOErrorHelper, Result, Value, ValueKind, value::sealed::Primitive};
 
 #[inline(always)]
 pub(crate) fn is_valid_value_flag(half: u8) -> bool {
@@ -24,23 +24,6 @@ macro_rules! handle_type_flag {
             }
         }
     };
-}
-
-pub(crate) trait IOErrorHelper<T> {
-    fn io(self, message: &str) -> Result<T>;
-}
-impl IOErrorHelper<()> for std::io::Result<()> {
-    fn io(self, message: &str) -> Result<()> {
-        match self {
-            Ok(value) => Ok(value),
-            Err(error) => match error.kind() {
-                std::io::ErrorKind::UnexpectedEof => {
-                    return Err(Error::EOF(message.to_owned()));
-                }
-                _ => return Err(Error::IOError(error)),
-            },
-        }
-    }
 }
 
 /// Abstraction layer for reading UTF tables

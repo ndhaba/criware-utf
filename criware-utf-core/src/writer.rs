@@ -1,6 +1,6 @@
 use std::{any::type_name, borrow::Cow, collections::HashMap, io::Write};
 
-use crate::{Error, Result, Value, ValueKind, reader::IOErrorHelper, value::sealed::Primitive};
+use crate::{Error, IOErrorHelper, Result, Value, ValueKind, value::sealed::Primitive};
 
 /**
 Extra contextual info for accurating recreating read tables when writing

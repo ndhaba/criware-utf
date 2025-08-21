@@ -5,12 +5,14 @@
 
 use thiserror::Error;
 
+mod packet;
 mod reader;
 mod schema;
 mod table;
 mod value;
 mod writer;
 
+pub use crate::packet::Packet;
 pub use crate::reader::Reader;
 pub use crate::schema::{ColumnStorageFormat, Schema, SchemaColumn};
 pub use crate::table::Table;
@@ -35,6 +37,13 @@ pub enum Error {
     ///
     #[error("string/blob not found")]
     DataNotFound,
+    ///
+    /// If a UTF packet is unable to be decrypted
+    ///
+    /// This means the table's data is malformed
+    ///
+    #[error("unable to decrypt UTF packet")]
+    DecryptionError,
     ///
     /// If the entire content of the table is unable to be read from a stream
     ///
@@ -119,3 +128,20 @@ pub enum Error {
 /// A typedef of the result returned by much of the crate.
 ///
 pub type Result<T> = std::result::Result<T, Error>;
+
+pub(crate) trait IOErrorHelper<T> {
+    fn io(self, message: &str) -> Result<T>;
+}
+impl IOErrorHelper<()> for std::io::Result<()> {
+    fn io(self, message: &str) -> Result<()> {
+        match self {
+            Ok(value) => Ok(value),
+            Err(error) => match error.kind() {
+                std::io::ErrorKind::UnexpectedEof => {
+                    return Err(Error::EOF(message.to_owned()));
+                }
+                _ => return Err(Error::IOError(error)),
+            },
+        }
+    }
+}
