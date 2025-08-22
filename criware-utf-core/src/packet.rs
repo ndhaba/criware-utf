@@ -8,15 +8,22 @@ use crate::{Error, IOErrorHelper, Result, Table};
 
 mod cri_encryption;
 
-fn aligned_vec(size: usize, align: usize) -> Vec<u8> {
-    let layout = Layout::from_size_align(size, align).expect("Invalid layout");
+fn aligned_vec(initial_size: usize, size: usize) -> Vec<u8> {
+    let minimum_size = size.div_ceil(64) << 6;
+    let layout = Layout::from_size_align(minimum_size, 64).expect("Invalid layout");
     unsafe {
         let ptr = alloc::alloc(layout);
         if ptr.is_null() {
             alloc::handle_alloc_error(layout);
         }
-        Vec::from_raw_parts(ptr, size, size)
+        Vec::from_raw_parts(ptr, initial_size, minimum_size)
     }
+}
+fn aligned_vec_empty() -> Vec<u8> {
+    aligned_vec(0, 256)
+}
+fn aligned_vec_full(size: usize) -> Vec<u8> {
+    aligned_vec(size, size)
 }
 
 /**
@@ -66,7 +73,8 @@ impl<T: Table> Packet<T> {
         if table_size < 32 {
             return Err(Error::MalformedHeader);
         }
-        let mut table_data = aligned_vec(table_size as usize, 32);
+        let mut table_data = aligned_vec_full(table_size as usize);
+        let mut decrypted_table_data = aligned_vec_full(table_size as usize);
         reader
             .read_exact(table_data.as_mut_slice())
             .io("UTF table")?;
@@ -79,10 +87,8 @@ impl<T: Table> Packet<T> {
             });
         }
         if !cri_encryption::can_decrypt(table_data.as_slice()) {
-            println!("Fail");
             return Err(Error::DecryptionError);
         }
-        let mut decrypted_table_data = aligned_vec(table_size as usize, 32);
         cri_encryption::decrypt(table_data.as_slice(), decrypted_table_data.as_mut_slice());
         if &decrypted_table_data[0..4] == b"@UTF" {
             return Ok(Packet {
@@ -99,12 +105,15 @@ impl<T: Table> Packet<T> {
     Writes a UTF table packet to the given stream.
      */
     pub fn write_packet(&self, writer: &mut dyn Write) -> Result<()> {
-        let mut table_buffer = Cursor::new(Vec::new());
+        let mut table_buffer = Cursor::new(aligned_vec_empty());
         self.table.write(&mut table_buffer)?;
         let table_buffer = {
-            let buffer = table_buffer.into_inner();
+            let mut buffer = table_buffer.into_inner();
+            if buffer.capacity() < buffer.len().div_ceil(64) << 6 {
+                buffer.reserve_exact(64 - (buffer.len() & 63));
+            }
             if self.encrypted {
-                let mut new_buffer = Vec::with_capacity(buffer.len());
+                let mut new_buffer = aligned_vec_full(buffer.len());
                 cri_encryption::encrypt(buffer.as_slice(), new_buffer.as_mut_slice());
                 new_buffer
             } else {

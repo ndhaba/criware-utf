@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "criware-utf"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "criware-utf-core",
  "criware-utf-macros",
@@ -12,29 +12,19 @@ dependencies = [
 
 [[package]]
 name = "criware-utf-core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
- "inventory",
  "thiserror",
 ]
 
 [[package]]
 name = "criware-utf-macros"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "criware-utf-core",
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "inventory"
-version = "0.3.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab08d7cd2c5897f2c949e5383ea7c7db03fb19130ffcfbf7eda795137ae3cb83"
-dependencies = [
- "rustversion",
 ]
 
 [[package]]
@@ -54,12 +44,6 @@ checksum = "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
 dependencies = [
  "proc-macro2",
 ]
-
-[[package]]
-name = "rustversion"
-version = "1.0.22"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "syn"

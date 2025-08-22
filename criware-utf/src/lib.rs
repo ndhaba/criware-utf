@@ -25,6 +25,9 @@ the structure of a table *without its contents*. This can be useful
 for debugging, or any situation where a table may be one of many possible
 schemas (see example).
 
+The [`Packet`] type mimics the method in which the primary tables in a CPK
+file are stored. Encryption and decryption are handled automatically.
+
 The [`Reader`] and [`Writer`] types are also available for use in custom
 read/write procedures, but they are, in their current state, highly
 specialized for the [`utf_table`] macro, so using them is

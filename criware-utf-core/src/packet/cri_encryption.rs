@@ -12,75 +12,67 @@ pub fn can_decrypt(src: &[u8]) -> bool {
     u32::from_le_bytes(src[0..4].try_into().unwrap()) == 0xF5F39E1Fu32
 }
 
-fn decrypt_fallback_raw(src: &[u8], dst: &mut [u8], mut i: usize) {
-    let mask = DECRYPTION_MASK;
-    while i < src.len() {
-        dst[i] = src[i] ^ mask[i & 63];
-        i += 1;
-    }
+pub fn decrypt_fallback(src: &[u8], dst: &mut [u8]) {
+    let count = src.len().div_ceil(8);
+    let mut i = 0usize;
+    unsafe {
+        let mask: [u64; 8] = transmute(DECRYPTION_MASK);
+        let src: &[u64] = transmute(src);
+        let dst: &mut [u64] = transmute(&mut *dst);
+        while i < count {
+            dst[i] = src[i] ^ mask[i & 7];
+            i += 1;
+        }
+    };
 }
 
-fn decrypt_fallback(src: &[u8], dst: &mut [u8]) {
-    decrypt_fallback_raw(src, dst, 0);
+macro_rules! decrypt_vectored {
+    ($src:expr, $dst:expr, $ty:ty, $func:ident, $shift:literal) => {
+        let count = $src.len().div_ceil(1 << $shift);
+        let mut i = 0usize;
+        // direct SIMD instructions are always unsafe
+        unsafe {
+            #[cfg(target_arch = "x86")]
+            use std::arch::x86::{$func, $ty};
+            #[cfg(target_arch = "x86_64")]
+            use std::arch::x86_64::{$func, $ty};
+
+            let mask: [$ty; (64 >> $shift)] = transmute(DECRYPTION_MASK);
+            let src: &[$ty] = transmute($src);
+            let dst: &mut [$ty] = transmute(&mut *$dst);
+            while i < count {
+                dst[i] = $func(src[i], mask[i & ((64 >> $shift) - 1)]);
+                i += 1;
+            }
+        }
+    };
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "sse2")]
 fn decrypt_sse2(src: &[u8], dst: &mut [u8]) {
-    let end = src.len() - (src.len() & 0xf);
-    let count = src.len().wrapping_shr(4);
-    let mut i = 0usize;
-    unsafe {
-        #[cfg(target_arch = "x86")]
-        use std::arch::x86::{__m128i, _mm_xor_si128};
-        #[cfg(target_arch = "x86_64")]
-        use std::arch::x86_64::{__m128i, _mm_xor_si128};
-        let mask: [__m128i; 4] = transmute(DECRYPTION_MASK);
-        let src: &[__m128i] = transmute(&(src[0..end]));
-        let dst: &mut [__m128i] = transmute(&mut (dst[0..end]));
-        while i < count {
-            dst[i] = _mm_xor_si128(src[i], mask[i & 3]);
-            i += 1;
-        }
-        i <<= 4;
-    };
-    decrypt_fallback_raw(&src[end..], &mut dst[end..], i);
+    decrypt_vectored!(src, dst, __m128i, _mm_xor_si128, 4);
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 fn decrypt_avx2(src: &[u8], dst: &mut [u8]) {
-    let end = src.len() - (src.len() & 0x1f);
-    let count = src.len().wrapping_shr(5);
-    let mut i = 0usize;
-    unsafe {
-        #[cfg(target_arch = "x86")]
-        use std::arch::x86::{__m256i, _mm256_xor_si256};
-        #[cfg(target_arch = "x86_64")]
-        use std::arch::x86_64::{__m256i, _mm256_xor_si256};
-        let mask: (__m256i, __m256i) = transmute(DECRYPTION_MASK);
-        let src: &[__m256i] = transmute(src);
-        let dst: &mut [__m256i] = transmute(&mut *dst);
-        while i < count - 1 {
-            dst[i..i + 2].copy_from_slice(&[
-                _mm256_xor_si256(*src.get_unchecked(i), mask.0),
-                _mm256_xor_si256(*src.get_unchecked(i + 1), mask.1),
-            ]);
-            i += 2;
-        }
-        if i < count {
-            dst[i] = _mm256_xor_si256(src[i], mask.0);
-            i += 1;
-        }
-        i <<= 5;
-    };
-    decrypt_fallback_raw(&src[end..], &mut dst[end..], i);
+    decrypt_vectored!(src, dst, __m256i, _mm256_xor_si256, 5);
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx512f")]
+fn decrypt_avx512f(src: &[u8], dst: &mut [u8]) {
+    decrypt_vectored!(src, dst, __m512i, _mm512_xor_si512, 6);
 }
 
 pub fn decrypt(src: &[u8], dst: &mut [u8]) {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     unsafe {
-        if is_x86_feature_detected!("avx2") {
+        if is_x86_feature_detected!("avx512f") {
+            // untested :(
+            return decrypt_avx512f(src, dst);
+        } else if is_x86_feature_detected!("avx2") {
             return decrypt_avx2(src, dst);
         } else if is_x86_feature_detected!("sse2") {
             return decrypt_sse2(src, dst);

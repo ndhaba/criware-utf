@@ -8,5 +8,5 @@ edition = "2024"
 repository = "https://github.com/ndhaba/criware-utf"
 
 [dependencies]
-criware-utf-core = { version = "1.0.0", path = "../criware-utf-core" }
-criware-utf-macros = { version = "1.0.0", path = "../criware-utf-macros" }
+criware-utf-core = { version = "1.1.0", path = "../criware-utf-core" }
+criware-utf-macros = { version = "1.1.0", path = "../criware-utf-macros" }
