@@ -27,8 +27,15 @@ pub fn decrypt_fallback(src: &[u8], dst: &mut [u8]) {
 }
 
 macro_rules! decrypt_vectored {
-    ($src:expr, $dst:expr, $ty:ty, $func:ident, $shift:literal) => {
-        let count = $src.len().div_ceil(1 << $shift);
+    {
+        src = $src:expr,
+        dst = $dst:expr,
+        vector_type = $ty:ty,
+        vector_xor = $func:ident,
+        vector_bits = $bits:literal
+    } => {
+        const IDX_MASK: usize = (512 / $bits) - 1;
+        let count = $src.len().div_ceil($bits >> 3);
         let mut i = 0usize;
         // direct SIMD instructions are always unsafe
         unsafe {
@@ -37,11 +44,11 @@ macro_rules! decrypt_vectored {
             #[cfg(target_arch = "x86_64")]
             use std::arch::x86_64::{$func, $ty};
 
-            let mask: [$ty; (64 >> $shift)] = transmute(DECRYPTION_MASK);
+            let mask: [$ty; (512 / $bits)] = transmute(DECRYPTION_MASK);
             let src: &[$ty] = transmute($src);
             let dst: &mut [$ty] = transmute(&mut *$dst);
             while i < count {
-                dst[i] = $func(src[i], mask[i & ((64 >> $shift) - 1)]);
+                dst[i] = $func(src[i], mask[i & IDX_MASK]);
                 i += 1;
             }
         }
@@ -51,19 +58,37 @@ macro_rules! decrypt_vectored {
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "sse2")]
 fn decrypt_sse2(src: &[u8], dst: &mut [u8]) {
-    decrypt_vectored!(src, dst, __m128i, _mm_xor_si128, 4);
+    decrypt_vectored! {
+        src = src,
+        dst = dst,
+        vector_type = __m128i,
+        vector_xor = _mm_xor_si128,
+        vector_bits = 128
+    };
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 fn decrypt_avx2(src: &[u8], dst: &mut [u8]) {
-    decrypt_vectored!(src, dst, __m256i, _mm256_xor_si256, 5);
+    decrypt_vectored! {
+        src = src,
+        dst = dst,
+        vector_type = __m256i,
+        vector_xor = _mm256_xor_si256,
+        vector_bits = 256
+    };
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f")]
 fn decrypt_avx512f(src: &[u8], dst: &mut [u8]) {
-    decrypt_vectored!(src, dst, __m512i, _mm512_xor_si512, 6);
+    decrypt_vectored! {
+        src = src,
+        dst = dst,
+        vector_type = __m512i,
+        vector_xor = _mm512_xor_si512,
+        vector_bits = 512
+    };
 }
 
 pub fn decrypt(src: &[u8], dst: &mut [u8]) {
